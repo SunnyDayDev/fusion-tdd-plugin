@@ -126,6 +126,7 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
 
         override fun visitElement(element: PsiElement) {
             if (element is KtNameReferenceExpression) {
+
                 when (val reference = element.resolve()) {
                     is KtClass -> {
                         val fqName = reference.fqName?.toString().orEmpty()
@@ -136,14 +137,12 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
 
                     is KtProperty, is KtNamedFunction -> {
                         if (
-                            reference.context is KtClassBody ||
-                            reference.context is KtFile
+                            (reference.context is KtClassBody || reference.context is KtFile) &&
+                            usedReferences.add(reference)
                         ) {
-                            if (usedReferences.add(reference)) {
-                                val fqName = reference.getKotlinFqName()?.toString().orEmpty()
-                                if (fqName.startsWith(settings.projectPackage.orEmpty())) {
-                                    checkQueue.add(element)
-                                }
+                            val fqName = reference.getKotlinFqName()?.toString().orEmpty()
+                            if (fqName.startsWith(settings.projectPackage.orEmpty())) {
+                                checkQueue.add(reference)
                             }
                         }
                     }
