@@ -1,0 +1,54 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
+    <id>dev.sunnyday.fusiontdd.FusionTDDPlugin</id>
+
+    <!-- Public plugin name should be written in Title Case.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-name -->
+    <name>Fusion TDD</name>
+
+    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
+    <vendor email="support@yourcompany.com" url="https://www.yourcompany.com">YourCompany</vendor>
+
+    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
+         Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
+    <description><![CDATA[
+    Enter short description for your plugin here.<br>
+    <em>most HTML tags may be used</em>
+  ]]></description>
+
+    <!-- Product and plugin compatibility requirements.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+    <depends>org.jetbrains.kotlin</depends>
+
+    <!-- Extension points defined by the plugin.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+
+    <actions>
+        <!-- Add your actions here -->
+        <group id="dev.sunnyday.fusiontdd.fusiontddplugin.idea.action.CodeGenerateActionGroup"
+               class="dev.sunnyday.fusiontdd.fusiontddplugin.idea.action.CodeGenerateActionGroup"
+               text="TDD CodeGenerator"
+               description="TDD code generator"
+               popup="true">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after"
+                          relative-to-action="ProjectViewPopupMenuRefactoringGroup"/>
+            <add-to-group group-id="GenerateGroup" anchor="after" relative-to-action="JavaGenerateGroup2"/>
+        </group>
+    </actions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <projectConfigurable
+                parentId="tools"
+                provider="dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTTDSettingsConfigurableProvider"
+                id="dev.sunnyday.fusiontdd.fusiontdd.ApplicationSettingsConfigurable"
+                displayName="Fusion TDD"/>
+
+        <projectService
+                serviceInterface="dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactoryService"
+                serviceImplementation="dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.ProjectPipelineStepsFactoryService"/>
+    </extensions>
+</idea-plugin>

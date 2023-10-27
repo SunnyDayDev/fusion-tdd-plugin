@@ -1,0 +1,88 @@
+package dev.sunnyday.fusiontdd.fusiontddplugin.idea.action
+
+import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.project.Project
+import com.intellij.psi.util.PsiTreeUtil
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactoryService
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.getLeftOrNull
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.isRight
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.requireRight
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.FusionTDDPsiUtils
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.andThen
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtNamedFunction
+
+
+class CodeGenerateAction : AnAction() {
+
+    private val logger: Logger = thisLogger()
+
+    init {
+        templatePresentation.description = "Generate function body by its tests"
+        templatePresentation.text = "TDD Generate"
+    }
+
+    override fun getActionUpdateThread(): ActionUpdateThread {
+        return ActionUpdateThread.BGT
+    }
+
+    override fun update(event: AnActionEvent) {
+        logger.debug("Update '${templatePresentation.text}' action")
+
+        val presentation: Presentation = event.presentation
+        val project: Project? = event.project
+
+        val targetFunctionOrReason = ActionEventUtils.getFunctionBelowCaretOrReason(event)
+
+        if (project == null || targetFunctionOrReason.isRight) {
+            presentation.setEnabled(false)
+        } else {
+            presentation.setEnabled(true)
+        }
+    }
+
+    override fun actionPerformed(event: AnActionEvent) {
+        logger.debug("Action '${templatePresentation.text}' performed")
+
+        val project = PlatformDataKeys.PROJECT.getData(event.dataContext)
+            ?: return logCantProceed("isn't a project")
+
+        val targetFunctionOrReason = ActionEventUtils.getFunctionBelowCaretOrReason(event)
+        val targetFunction = targetFunctionOrReason.getLeftOrNull()
+            ?: return logCantProceed(targetFunctionOrReason.requireRight())
+
+        val targetClass = PsiTreeUtil.getParentOfType(targetFunction, KtClass::class.java, false)
+            ?: return logCantProceed("isn't a class")
+
+        // TODO: search usages of fun and check is it test
+        val testClass = FusionTDDPsiUtils.getTestClass(project, targetClass)
+            ?: return logCantProceed("doesn't have tests")
+
+        proceedGenerateCodeAction(targetFunction, targetClass, testClass, project)
+    }
+
+    private fun logCantProceed(reason: String) {
+        logger.debug("Can't proceed '${templatePresentation.text}', $reason")
+    }
+
+    private fun proceedGenerateCodeAction(
+        targetFunction: KtNamedFunction,
+        targetClass: KtClass,
+        testClass: KtClass,
+        project: Project,
+    ) {
+        logger.debug("Proceed '${templatePresentation.text}' for: ${targetFunction.name}")
+
+        val pipeline = project.service<PipelineStepsFactoryService>()
+
+        pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass, testClass)
+            .andThen(pipeline.prepareGenerationSourceCode())
+            .andThen(pipeline.generateCodeSuggestion())
+            .andThen(pipeline.replaceFunctionBody(targetFunction))
+            .execute()
+    }
+}
