@@ -17,13 +17,13 @@ internal class ReplaceFunctionBodyPipelineStep(
     private val logger = thisLogger()
 
     override fun execute(input: GenerateCodeBlockResult, observer: (Result<KtNamedFunction>) -> Unit) {
-        logger.debug("Pipeline: Replace function body of ${targetFunction.name}")
-
         val result = runCatching {
             val application = ApplicationManager.getApplication()
 
             val newBody = application.runReadAction(
                 Computable {
+                    logger.debug("Pipeline: Replace function body of ${targetFunction.name}")
+
                     KtPsiFactory(targetFunction.project, markGenerated = false)
                         .createBlock(input.variants.firstOrNull()?.rawText.orEmpty())
                 }

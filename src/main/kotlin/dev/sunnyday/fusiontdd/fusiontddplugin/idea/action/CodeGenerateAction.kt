@@ -1,6 +1,9 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.idea.action
 
-import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.Presentation
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.diagnostic.thisLogger
@@ -13,6 +16,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.requireRight
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.FusionTDDPsiUtils
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.andThen
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.retry
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNamedFunction
 
@@ -38,17 +42,13 @@ class CodeGenerateAction : AnAction() {
 
         val targetFunctionOrReason = ActionEventUtils.getFunctionBelowCaretOrReason(event)
 
-        if (project == null || targetFunctionOrReason.isRight) {
-            presentation.setEnabled(false)
-        } else {
-            presentation.setEnabled(true)
-        }
+        presentation.isEnabled = !(project == null || targetFunctionOrReason.isRight)
     }
 
     override fun actionPerformed(event: AnActionEvent) {
         logger.debug("Action '${templatePresentation.text}' performed")
 
-        val project = PlatformDataKeys.PROJECT.getData(event.dataContext)
+        val project = event.project
             ?: return logCantProceed("isn't a project")
 
         val targetFunctionOrReason = ActionEventUtils.getFunctionBelowCaretOrReason(event)
@@ -81,8 +81,16 @@ class CodeGenerateAction : AnAction() {
 
         pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass, testClass)
             .andThen(pipeline.prepareGenerationSourceCode())
-            .andThen(pipeline.generateCodeSuggestion())
-            .andThen(pipeline.replaceFunctionBody(targetFunction))
+            .andThen(
+                pipeline.generateCodeSuggestion()
+                    .andThen(pipeline.replaceFunctionBody(targetFunction))
+                    .retry(3)
+            )
             .execute()
+    }
+
+    companion object {
+
+        const val ID = "dev.sunnyday.fusiontdd.action.generate"
     }
 }

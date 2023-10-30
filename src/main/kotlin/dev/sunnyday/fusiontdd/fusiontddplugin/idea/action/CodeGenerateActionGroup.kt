@@ -51,13 +51,8 @@ class CodeGenerateActionGroup : ActionGroup(), DumbAware {
 
     private fun getOrCreateCodeGenerateAction(): AnAction {
         val actionManager = ActionManager.getInstance()
-        val actionId = getCodeGenerateActionId()
-        return actionManager.getAction(actionId) ?: CodeGenerateAction().also { action ->
-            actionManager.registerAction(actionId, action)
+        return actionManager.getAction(CodeGenerateAction.ID) ?: CodeGenerateAction().also { action ->
+            actionManager.registerAction(CodeGenerateAction.ID, action)
         }
-    }
-
-    private fun getCodeGenerateActionId(): String {
-        return "dev.sunnyday.fusiontdd.action.generate"
     }
 }

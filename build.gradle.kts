@@ -49,6 +49,10 @@ tasks {
     test {
         useJUnitPlatform()
     }
+
+    get("classpathIndexCleanup").apply {
+        dependsOn(get("compileTestKotlin"))
+    }
 }
 
 dependencies {
