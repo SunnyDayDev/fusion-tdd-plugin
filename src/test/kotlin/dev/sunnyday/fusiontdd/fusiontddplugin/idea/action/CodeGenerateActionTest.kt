@@ -19,6 +19,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.test.getNamedFunction
 import io.mockk.*
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.properties.Delegates
@@ -46,7 +47,6 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             runReadAction {
                 file.toPsiFile(fixture.project)
                     .let(::requireNotNull)
-                    .let(::spyk)
             }
         }
 
@@ -77,6 +77,11 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         }
     }
 
+    @AfterEach
+    fun tearDown() {
+        clearAllMocks()
+    }
+
     @Test
     fun `update action in background thread`() {
         val threadType = action.actionUpdateThread
@@ -104,7 +109,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
 
     @Test
     fun `on update if no element below caret, hide action`() {
-        every { targetClassFile.findElementAt(any()) } returns null
+        every { caret.offset } returns 1_000
 
         runReadAction { action.update(actionEvent) }
 
@@ -156,7 +161,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
 
     @Test
     fun `on perform if no element below caret, do nothing`() {
-        every { targetClassFile.findElementAt(any()) } returns null
+        every { caret.offset } returns 1_000
 
         runReadAction { action.actionPerformed(actionEvent) }
 

@@ -9,10 +9,11 @@ import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
 import com.intellij.testFramework.registerServiceInstance
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
+import io.mockk.clearAllMocks
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.spyk
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.properties.Delegates
@@ -37,7 +38,6 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
             runReadAction {
                 file.toPsiFile(fixture.project)
                     .let(::requireNotNull)
-                    .let(::spyk)
             }
         }
 
@@ -64,6 +64,11 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
         action.apply {
             every { dataContext } returns this@CodeGenerateActionGroupTest.dataContext
         }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        clearAllMocks()
     }
 
     @Test
@@ -137,7 +142,7 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
 
     @Test
     fun `if no element below caret, hide actions`() {
-        every { targetClassFile.findElementAt(any()) } returns null
+        every { caret.offset } returns 1_000
 
         val actions = runReadAction { actionsGroup.getChildren(action) }
 
@@ -150,7 +155,6 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
             runReadAction {
                 file.toPsiFile(fixture.project)
                     .let(::requireNotNull)
-                    .let(::spyk)
             }
         }
 
