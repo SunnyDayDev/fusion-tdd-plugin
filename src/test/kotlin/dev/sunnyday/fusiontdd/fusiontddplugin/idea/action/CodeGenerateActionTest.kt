@@ -19,6 +19,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.test.getNamedFunction
 import io.mockk.*
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.properties.Delegates
@@ -74,6 +75,11 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             every { dataContext } returns this@CodeGenerateActionTest.dataContext
             every { presentation } answers { this@CodeGenerateActionTest.presentation }
         }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        clearAllMocks()
     }
 
     @Test
