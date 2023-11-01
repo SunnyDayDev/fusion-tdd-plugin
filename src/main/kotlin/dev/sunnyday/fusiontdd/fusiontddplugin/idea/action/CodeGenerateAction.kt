@@ -17,6 +17,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.GeneratingFunctionHig
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.andThen
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.retry
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.wrapWithProgress
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNamedFunction
 
@@ -85,27 +86,35 @@ class CodeGenerateAction : AnAction() {
         logger.debug("Proceed '${templatePresentation.text}' for: ${targetFunction.name}")
 
         val pipeline = project.service<PipelineStepsFactoryService>()
-        val highlightAnimator = service<GeneratingFunctionHighlightAnimatorProvider>()
-            .getGeneratingFunctionHighlightAnimator()
-
-        val highlightAnimation = if (editor != null) {
-            highlightAnimator.animate(targetFunction, editor)
-        } else {
-            Disposable { }
-        }
 
         pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass, testClass)
             .andThen(pipeline.prepareGenerationSourceCode())
             .andThen(
                 pipeline.generateCodeSuggestion()
                     .andThen(pipeline.replaceFunctionBody(targetFunction))
-                    .retry(3)
+                    .retry(GENERATE_FUNCTION_RETRIES_COUNT)
             )
-            .execute { highlightAnimation.dispose() }
+            .wrapWithProgress { highlightGeneratingFunctionWithAnimation(targetFunction, editor) }
+            .execute()
+    }
+
+    private fun highlightGeneratingFunctionWithAnimation(
+        targetFunction: KtNamedFunction,
+        editor: Editor?,
+    ): Disposable {
+        val highlightAnimator = service<GeneratingFunctionHighlightAnimatorProvider>()
+            .getGeneratingFunctionHighlightAnimator()
+
+        return if (editor != null) {
+            highlightAnimator.animate(targetFunction, editor)
+        } else {
+            Disposable { }
+        }
     }
 
     companion object {
 
         const val ID = "dev.sunnyday.fusiontdd.action.generate"
+        const val GENERATE_FUNCTION_RETRIES_COUNT = 3
     }
 }
