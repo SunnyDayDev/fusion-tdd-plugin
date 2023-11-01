@@ -1,5 +1,6 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.pipeline
 
+import com.intellij.openapi.Disposable
 import java.util.concurrent.atomic.AtomicInteger
 
 internal fun interface PipelineStep<in Input, out Output> {
@@ -40,4 +41,24 @@ internal fun <Input, Output> PipelineStep<Input, Output>.retry(times: Int): Pipe
 
         execute(input, retryObserver)
     }
+}
+
+internal fun <Input, Output, Progress> PipelineStep<Input, Output>.wrapWithProgress(
+    onExecute: () -> Progress,
+    onResult: (Progress) -> Unit,
+): PipelineStep<Input, Output> {
+    return PipelineStep { input, observer ->
+        val progress = onExecute.invoke()
+
+        execute(input) { result ->
+            onResult.invoke(progress)
+            observer.invoke(result)
+        }
+    }
+}
+
+internal fun <Input, Output> PipelineStep<Input, Output>.wrapWithProgress(
+    onExecute: () -> Disposable,
+): PipelineStep<Input, Output> {
+    return wrapWithProgress(onExecute) { disposableProgress -> disposableProgress.dispose() }
 }
