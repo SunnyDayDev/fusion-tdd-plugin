@@ -76,5 +76,6 @@ dependencies {
     testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("com.google.truth:truth:1.1.5")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
+    testImplementation("io.ktor:ktor-client-mock:2.3.5")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
 }
