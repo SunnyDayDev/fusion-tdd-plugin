@@ -1,12 +1,11 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.idea.action
 
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.Presentation
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.psi.util.PsiTreeUtil
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactoryService
@@ -14,6 +13,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.getLeftOrNull
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.isRight
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.requireRight
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.FusionTDDPsiUtils
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.GeneratingFunctionHighlightAnimatorProvider
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.andThen
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.retry
@@ -62,7 +62,13 @@ class CodeGenerateAction : AnAction() {
         val testClass = FusionTDDPsiUtils.getTestClass(project, targetClass)
             ?: return logCantProceed("doesn't have tests")
 
-        proceedGenerateCodeAction(targetFunction, targetClass, testClass, project)
+        proceedGenerateCodeAction(
+            targetFunction = targetFunction,
+            targetClass = targetClass,
+            testClass = testClass,
+            project = project,
+            editor = event.dataContext.getData(CommonDataKeys.EDITOR),
+        )
     }
 
     private fun logCantProceed(reason: String) {
@@ -74,10 +80,19 @@ class CodeGenerateAction : AnAction() {
         targetClass: KtClass,
         testClass: KtClass,
         project: Project,
+        editor: Editor?,
     ) {
         logger.debug("Proceed '${templatePresentation.text}' for: ${targetFunction.name}")
 
         val pipeline = project.service<PipelineStepsFactoryService>()
+        val highlightAnimator = service<GeneratingFunctionHighlightAnimatorProvider>()
+            .getGeneratingFunctionHighlightAnimator()
+
+        val highlightAnimation = if (editor != null) {
+            highlightAnimator.animate(targetFunction, editor)
+        } else {
+            Disposable { }
+        }
 
         pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass, testClass)
             .andThen(pipeline.prepareGenerationSourceCode())
@@ -86,7 +101,7 @@ class CodeGenerateAction : AnAction() {
                     .andThen(pipeline.replaceFunctionBody(targetFunction))
                     .retry(3)
             )
-            .execute()
+            .execute { highlightAnimation.dispose() }
     }
 
     companion object {
