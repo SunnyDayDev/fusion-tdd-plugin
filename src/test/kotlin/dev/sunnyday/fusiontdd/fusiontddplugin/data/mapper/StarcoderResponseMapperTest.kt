@@ -5,6 +5,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.data.response.StarcoderResultDto
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 class StarcoderResponseMapperTest {
 
@@ -24,5 +25,13 @@ class StarcoderResponseMapperTest {
                 )
             )
         )
+    }
+
+    @Test
+    fun `if result is null, throw error`() {
+        val resultDto = StarcoderResultDto(generatedText = null, error = "Received error message")
+
+        val error = assertThrows<Error> { mapper.mapResultsToGeneratedCode(listOf(resultDto)) }
+        assertThat(error.message).isEqualTo("Received error message")
     }
 }
