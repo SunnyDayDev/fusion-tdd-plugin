@@ -18,6 +18,12 @@ fun JavaCodeInsightTestFixture.getClass(name: String): KtClass {
     return javaFacade.getClass(name)
 }
 
+fun JavaCodeInsightTestFixture.getClassFunction(fqName: String): KtNamedFunction {
+    val className = fqName.substringBeforeLast('.')
+    val functionName = fqName.substringAfterLast('.')
+    return javaFacade.getClass(className).getNamedFunction(functionName)
+}
+
 fun JavaCodeInsightTestFixture.getHighLevelFun(fileClass: String, name: String): KtNamedFunction {
     return javaFacade.getHighLevelFun(fileClass, name)
 }

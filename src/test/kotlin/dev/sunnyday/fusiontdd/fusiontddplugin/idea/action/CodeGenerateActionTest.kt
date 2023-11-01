@@ -1,20 +1,26 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.idea.action
 
 import com.google.common.truth.Truth.assertThat
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.editor.Caret
 import com.intellij.psi.PsiFile
+import com.intellij.testFramework.RunsInEdt
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
 import com.intellij.testFramework.registerServiceInstance
+import com.intellij.util.application
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactoryService
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.editor.GeneratingFunctionHighlightAnimator
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.GeneratingFunctionHighlightAnimatorProvider
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClass
+import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClassFunction
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getNamedFunction
 import io.mockk.*
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
@@ -28,6 +34,8 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
 
     private val settings = mockk<FusionTDDSettings>()
     private val pipelineFactory = mockk<PipelineStepsFactoryService>()
+    private val generatingFunctionHighlightAnimatorProvider =
+        mockk<GeneratingFunctionHighlightAnimatorProvider>(relaxed = true)
 
     private val dataContext = mockk<DataContext>()
     private val actionEvent = mockk<AnActionEvent>()
@@ -59,6 +67,10 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             every { starcoderModel } returns "starcoder"
         }
 
+        application.registerServiceInstance(
+            GeneratingFunctionHighlightAnimatorProvider::class.java,
+            generatingFunctionHighlightAnimatorProvider,
+        )
         fixture.project.registerServiceInstance(PipelineStepsFactoryService::class.java, pipelineFactory)
 
         caret.apply {
@@ -68,6 +80,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         dataContext.apply {
             every { getData(CommonDataKeys.PSI_FILE) } answers { targetClassFile }
             every { getData(LangDataKeys.CARET) } answers { caret }
+            every { getData(CommonDataKeys.EDITOR) } answers { fixture.editor }
         }
 
         actionEvent.apply {
@@ -215,33 +228,17 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         val sourceForGeneration = mockk<CodeBlock>(relaxed = true)
         val generationResult = mockk<GenerateCodeBlockResult>()
 
-        val collectDependenciesPipelineStep = mockk<PipelineStep<Nothing?, FunctionTestDependencies>> {
-            every { execute(null, any()) } answers {
-                secondArg<(Result<FunctionTestDependencies>) -> Unit>().invoke(Result.success(functionTestDependencies))
-            }
-        }
-        val prepareSourcePipelineStep = mockk<PipelineStep<FunctionTestDependencies, CodeBlock>> {
-            every { execute(any(), any()) } answers {
-                secondArg<(Result<CodeBlock>) -> Unit>().invoke(Result.success(sourceForGeneration))
-            }
-        }
-        val generateFunctionPipelineStep = mockk<PipelineStep<CodeBlock, GenerateCodeBlockResult>> {
-            every { execute(any(), any()) } answers {
-                secondArg<(Result<GenerateCodeBlockResult>) -> Unit>().invoke(Result.success(generationResult))
-            }
-        }
-        val replaceFunctionPipelineStep = mockk<PipelineStep<GenerateCodeBlockResult, KtNamedFunction>> {
-            every { execute(any(), any()) } answers {
-                secondArg<(Result<KtNamedFunction>) -> Unit>().invoke(Result.success(targetFunction))
-            }
-        }
-
-        pipelineFactory.apply {
-            every { collectTestsAndUsedReferencesForFun(any(), any(), any()) } returns collectDependenciesPipelineStep
-            every { prepareGenerationSourceCode() } returns prepareSourcePipelineStep
-            every { generateCodeSuggestion() } returns generateFunctionPipelineStep
-            every { replaceFunctionBody(any()) } returns replaceFunctionPipelineStep
-        }
+        val (
+            collectDependenciesPipelineStep,
+            prepareSourcePipelineStep,
+            generateFunctionPipelineStep,
+            replaceFunctionPipelineStep,
+        ) = configurePipelineMock(
+            collectDependenciesResult = { Result.success(functionTestDependencies) },
+            prepareSourceResult = { Result.success(sourceForGeneration) },
+            generateFunctionResult = { Result.success(generationResult) },
+            replaceFunctionResult = { Result.success(targetFunction) },
+        )
 
         runReadAction { action.actionPerformed(actionEvent) }
 
@@ -264,37 +261,14 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
 
     @Test
     fun `on perform if error happened, try to retry 3 times`() {
-        val functionTestDependencies = mockk<FunctionTestDependencies>()
-        val sourceForGeneration = mockk<CodeBlock>(relaxed = true)
-        val generationResult = mockk<GenerateCodeBlockResult>()
-
-        val collectDependenciesPipelineStep = mockk<PipelineStep<Nothing?, FunctionTestDependencies>> {
-            every { execute(null, any()) } answers {
-                secondArg<(Result<FunctionTestDependencies>) -> Unit>().invoke(Result.success(functionTestDependencies))
-            }
-        }
-        val prepareSourcePipelineStep = mockk<PipelineStep<FunctionTestDependencies, CodeBlock>> {
-            every { execute(any(), any()) } answers {
-                secondArg<(Result<CodeBlock>) -> Unit>().invoke(Result.success(sourceForGeneration))
-            }
-        }
-        val generateFunctionPipelineStep = mockk<PipelineStep<CodeBlock, GenerateCodeBlockResult>> {
-            every { execute(any(), any()) } answers {
-                secondArg<(Result<GenerateCodeBlockResult>) -> Unit>().invoke(Result.success(generationResult))
-            }
-        }
-        val replaceFunctionPipelineStep = mockk<PipelineStep<GenerateCodeBlockResult, KtNamedFunction>> {
-            every { execute(any(), any()) } answers {
-                secondArg<(Result<KtNamedFunction>) -> Unit>().invoke(Result.failure(Error("Simulated error")))
-            }
-        }
-
-        pipelineFactory.apply {
-            every { collectTestsAndUsedReferencesForFun(any(), any(), any()) } returns collectDependenciesPipelineStep
-            every { prepareGenerationSourceCode() } returns prepareSourcePipelineStep
-            every { generateCodeSuggestion() } returns generateFunctionPipelineStep
-            every { replaceFunctionBody(any()) } returns replaceFunctionPipelineStep
-        }
+        val (
+            _,
+            _,
+            generateFunctionPipelineStep,
+            replaceFunctionPipelineStep,
+        ) = configurePipelineMock(
+            replaceFunctionResult = { Result.failure(Error("Simulated error")) },
+        )
 
         runReadAction { action.actionPerformed(actionEvent) }
 
@@ -303,4 +277,77 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             replaceFunctionPipelineStep.execute(any(), any())
         }
     }
+
+    @RunsInEdt
+    @Test
+    fun `on perform, highlight function while executing generation pipeline`() {
+        val animator = mockk<GeneratingFunctionHighlightAnimator>()
+        val animatorDisposable = mockk<Disposable>(relaxed = true)
+        every { animator.animate(any(), any()) } returns animatorDisposable
+        every { generatingFunctionHighlightAnimatorProvider.getGeneratingFunctionHighlightAnimator() } returns animator
+
+        fixture.openFileInEditor(targetClassFile.virtualFile)
+
+        val (firstPipelineStep, _, _, lastPipelineStep) = configurePipelineMock()
+
+        action.actionPerformed(actionEvent)
+
+        verifyOrder {
+            generatingFunctionHighlightAnimatorProvider.getGeneratingFunctionHighlightAnimator()
+            animator.animate(
+                fixture.getClassFunction("project.TargetClass.targetFunction"),
+                fixture.editor,
+            )
+
+            firstPipelineStep.execute(any())
+            lastPipelineStep.execute(any(), any())
+
+            animatorDisposable.dispose()
+        }
+    }
+
+    private fun configurePipelineMock(
+        collectDependenciesResult: () -> Result<FunctionTestDependencies> = { Result.success(mockk()) },
+        prepareSourceResult: () -> Result<CodeBlock> = { Result.success(mockk(relaxed = true)) },
+        generateFunctionResult: () -> Result<GenerateCodeBlockResult> = { Result.success(mockk()) },
+        replaceFunctionResult: () -> Result<KtNamedFunction> = { Result.success(mockk()) },
+    ): PipelineMock {
+        val collectDependencies = mockk<PipelineStep<Nothing?, FunctionTestDependencies>> {
+            every { execute(null, any()) } answers {
+                secondArg<(Result<FunctionTestDependencies>) -> Unit>().invoke(collectDependenciesResult.invoke())
+            }
+        }
+        val prepareSource = mockPipelineStep<FunctionTestDependencies, CodeBlock>(prepareSourceResult)
+        val generateFunction = mockPipelineStep<CodeBlock, GenerateCodeBlockResult>(generateFunctionResult)
+        val replaceFunction = mockPipelineStep<GenerateCodeBlockResult, KtNamedFunction>(replaceFunctionResult)
+
+        pipelineFactory.apply {
+            every { collectTestsAndUsedReferencesForFun(any(), any(), any()) } returns collectDependencies
+            every { prepareGenerationSourceCode() } returns prepareSource
+            every { generateCodeSuggestion() } returns generateFunction
+            every { replaceFunctionBody(any()) } returns replaceFunction
+        }
+
+        return PipelineMock(
+            collectDependenciesPipelineStep = collectDependencies,
+            prepareSourcePipelineStep = prepareSource,
+            generateFunctionPipelineStep = generateFunction,
+            replaceFunctionPipelineStep = replaceFunction,
+        )
+    }
+
+    private inline fun <reified I, O> mockPipelineStep(noinline resultProvider: () -> Result<O>): PipelineStep<I, O> {
+        return mockk<PipelineStep<I, O>> {
+            every { execute(any(), any()) } answers {
+                secondArg<(Result<O>) -> Unit>().invoke(resultProvider.invoke())
+            }
+        }
+    }
+
+    private data class PipelineMock(
+        val collectDependenciesPipelineStep: PipelineStep<Nothing?, FunctionTestDependencies>,
+        val prepareSourcePipelineStep: PipelineStep<FunctionTestDependencies, CodeBlock>,
+        val generateFunctionPipelineStep: PipelineStep<CodeBlock, GenerateCodeBlockResult>,
+        val replaceFunctionPipelineStep: PipelineStep<GenerateCodeBlockResult, KtNamedFunction>,
+    )
 }
