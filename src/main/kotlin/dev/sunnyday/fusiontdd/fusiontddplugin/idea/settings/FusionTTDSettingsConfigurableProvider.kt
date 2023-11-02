@@ -7,7 +7,6 @@ import com.intellij.openapi.options.ConfigurableProvider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.*
-import com.intellij.ui.dsl.gridLayout.HorizontalAlign
 import java.text.DecimalFormat
 
 internal class FusionTTDSettingsConfigurableProvider(
@@ -31,7 +30,7 @@ internal class FusionTTDSettingsConfigurable(
                 row {
                     textField()
                         .label("Starcoder auth token")
-                        .horizontalAlign(HorizontalAlign.FILL)
+                        .align(Align.FILL)
                         .bindText(
                             getter = { "**********" },
                             setter = { tokenValue ->
@@ -47,7 +46,7 @@ internal class FusionTTDSettingsConfigurable(
                 row {
                     textField()
                         .label("Project package")
-                        .horizontalAlign(HorizontalAlign.FILL)
+                        .align(Align.FILL)
                         .bindText(settings::projectPackage.orEmpty(), settings::projectPackage::set)
                 }
             }
@@ -56,7 +55,7 @@ internal class FusionTTDSettingsConfigurable(
                 row {
                     textField()
                         .label("Model")
-                        .horizontalAlign(HorizontalAlign.FILL)
+                        .align(Align.FILL)
                         .bindText(settings::starcoderModel.orEmpty(), settings::starcoderModel::set)
                 }
 
@@ -70,7 +69,7 @@ internal class FusionTTDSettingsConfigurable(
                                     "of generated text you want. Each new tokens slows down the request, " +
                                     "so look for balance between response times and length of text generated.",
                         )
-                        .horizontalAlign(HorizontalAlign.FILL)
+                        .align(Align.FILL)
                         .bindValue(settings::starcoderMaxNewTokens)
                 }
 
@@ -78,7 +77,7 @@ internal class FusionTTDSettingsConfigurable(
                     val temperatureFormat = DecimalFormat("#.##")
                     textField()
                         .label("Temperature")
-                        .validation { field ->
+                        .validationOnInput { field ->
                             val parseResult = runCatching { temperatureFormat.parse(field.text) }
                             when {
                                 parseResult.isFailure -> error("Must be a float")
@@ -92,7 +91,7 @@ internal class FusionTTDSettingsConfigurable(
                                     "1 means regular sampling, 0 means always take the highest score, " +
                                     "100.0 is getting closer to uniform probability.",
                         )
-                        .horizontalAlign(HorizontalAlign.FILL)
+                        .align(Align.FILL)
                         .bindText(
                             getter = { temperatureFormat.format(settings.starcoderTemperature) },
                             setter = { temperatureFormat.parse(it).toFloat() }

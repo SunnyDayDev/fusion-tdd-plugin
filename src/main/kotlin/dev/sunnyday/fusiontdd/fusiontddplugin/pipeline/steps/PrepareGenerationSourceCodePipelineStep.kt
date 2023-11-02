@@ -6,7 +6,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
-import org.jetbrains.kotlin.idea.base.utils.fqname.getKotlinFqName
+import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
 import org.jetbrains.kotlin.psi.*
 
 internal class PrepareGenerationSourceCodePipelineStep(
@@ -34,7 +34,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
     private fun StringBuilder.printImports(input: FunctionTestDependencies) {
         val usedImports = input.usedReferences.mapNotNullTo(mutableSetOf()) { reference ->
-            reference.getKotlinFqName()?.toString()
+            reference.kotlinFqName?.toString()
                 ?.takeIf { !it.startsWith(settings.projectPackage.orEmpty()) }
         }
 

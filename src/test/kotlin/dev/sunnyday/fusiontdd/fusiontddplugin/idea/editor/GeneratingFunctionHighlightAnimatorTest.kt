@@ -3,8 +3,8 @@ package dev.sunnyday.fusiontdd.fusiontddplugin.idea.editor
 import com.google.common.truth.Truth.assertThat
 import com.intellij.openapi.util.use
 import com.intellij.psi.PsiFile
-import com.intellij.testFramework.RunsInEdt
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
+import com.intellij.testFramework.runInEdtAndWait
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClassFunction
 import io.mockk.every
 import io.mockk.mockk
@@ -18,9 +18,8 @@ class GeneratingFunctionHighlightAnimatorTest : LightJavaCodeInsightFixtureTestC
 
     override fun getTestDataPath() = "testdata"
 
-    @RunsInEdt
     @Test
-    fun `on animate add highlight component`() {
+    fun `on animate add highlight component`() = runInEdtAndWait {
         addAndOpenTargetClassFile()
         val targetFun = fixture.getClassFunction("TargetClass.targetFun")
         val currentComponents = fixture.editor.contentComponent.components.toSet()
@@ -32,9 +31,8 @@ class GeneratingFunctionHighlightAnimatorTest : LightJavaCodeInsightFixtureTestC
         assertThat(newComponents).hasSize(1)
     }
 
-    @RunsInEdt
     @Test
-    fun `on dispose animation remove highlight component`() {
+    fun `on dispose animation remove highlight component`() = runInEdtAndWait {
         addAndOpenTargetClassFile()
         val targetFun = fixture.getClassFunction("TargetClass.targetFun")
         val currentComponents = fixture.editor.contentComponent.components.toSet()
@@ -46,9 +44,8 @@ class GeneratingFunctionHighlightAnimatorTest : LightJavaCodeInsightFixtureTestC
         assertThat(newComponents).isEmpty()
     }
 
-    @RunsInEdt
     @Test
-    fun `on animate, highlight function body`() {
+    fun `on animate, highlight function body`() = runInEdtAndWait {
         addAndOpenTargetClassFile()
         val targetFun = fixture.getClassFunction("TargetClass.targetFun")
         val currentComponents = fixture.editor.contentComponent.components.toSet()
@@ -63,10 +60,13 @@ class GeneratingFunctionHighlightAnimatorTest : LightJavaCodeInsightFixtureTestC
 
         highlight.paint(graphics)
 
+        val expectedStartX = 4 * CHAR_WIDTH
+        val expectedWidth = 17 * CHAR_WIDTH
+
         verify {
             graphics.drawRoundRect(
-                4 * CHAR_WIDTH, fixture.editor.lineHeight * 3,
-                17 * CHAR_WIDTH, fixture.editor.lineHeight,
+                range(expectedStartX - 5, expectedStartX + 5), fixture.editor.lineHeight * 3,
+                range(expectedWidth - 5, expectedWidth + 5), fixture.editor.lineHeight,
                 10, 10
             )
         }

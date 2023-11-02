@@ -8,8 +8,8 @@ import com.intellij.psi.util.PsiTreeUtil
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
-import org.jetbrains.kotlin.idea.base.utils.fqname.getKotlinFqName
-import org.jetbrains.kotlin.nj2k.postProcessing.resolve
+import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
+import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.psi.*
 import java.util.*
 
@@ -83,7 +83,7 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
             val trackingFunction = trackingFunction ?: return super.visitElement(element)
 
             if (element is KtNameReferenceExpression) {
-                val reference = element.resolve()
+                val reference = element.mainReference.resolve()
 
                 when (reference) {
                     targetFunction -> {
@@ -127,7 +127,7 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
         override fun visitElement(element: PsiElement) {
             if (element is KtNameReferenceExpression) {
 
-                when (val reference = element.resolve()) {
+                when (val reference = element.mainReference.resolve()) {
                     is KtClass -> {
                         val fqName = reference.fqName?.toString().orEmpty()
                         if (fqName.startsWith(settings.projectPackage.orEmpty())) {
@@ -140,7 +140,7 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
                             (reference.context is KtClassBody || reference.context is KtFile) &&
                             usedReferences.add(reference)
                         ) {
-                            val fqName = reference.getKotlinFqName()?.toString().orEmpty()
+                            val fqName = reference.kotlinFqName?.toString().orEmpty()
                             if (fqName.startsWith(settings.projectPackage.orEmpty())) {
                                 checkQueue.add(reference)
                             }
