@@ -14,8 +14,8 @@
          Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description><![CDATA[
-    Enter short description for your plugin here.<br>
-    <em>most HTML tags may be used</em>
+    Plugin is in progress.<br>
+    Check <a href="https://github.com/SunnyDayDev/fustion-tdd-plugin/blob/main/README.md">README</a> to know how to use.
   ]]></description>
 
     <!-- Product and plugin compatibility requirements.
