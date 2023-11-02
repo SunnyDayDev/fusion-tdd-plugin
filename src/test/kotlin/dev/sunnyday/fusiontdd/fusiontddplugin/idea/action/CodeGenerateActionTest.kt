@@ -6,9 +6,9 @@ import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.editor.Caret
 import com.intellij.psi.PsiFile
-import com.intellij.testFramework.RunsInEdt
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
 import com.intellij.testFramework.registerServiceInstance
+import com.intellij.testFramework.runInEdtAndWait
 import com.intellij.util.application
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
@@ -278,9 +278,8 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         }
     }
 
-    @RunsInEdt
     @Test
-    fun `on perform, highlight function while executing generation pipeline`() {
+    fun `on perform, highlight function while executing generation pipeline`() = runInEdtAndWait {
         val animator = mockk<GeneratingFunctionHighlightAnimator>()
         val animatorDisposable = mockk<Disposable>(relaxed = true)
         every { animator.animate(any(), any()) } returns animatorDisposable

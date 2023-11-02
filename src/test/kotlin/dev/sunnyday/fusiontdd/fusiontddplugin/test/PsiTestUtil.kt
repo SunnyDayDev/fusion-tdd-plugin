@@ -7,7 +7,7 @@ import com.intellij.testFramework.fixtures.JavaCodeInsightTestFixture
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.findKotlinClass
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
 import org.jetbrains.kotlin.asJava.elements.FakeFileForLightClass
-import org.jetbrains.kotlin.idea.search.projectScope
+import org.jetbrains.kotlin.idea.base.util.projectScope
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtProperty
