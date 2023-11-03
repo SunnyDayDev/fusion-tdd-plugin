@@ -89,6 +89,7 @@ class CodeGenerateAction : AnAction() {
 
         pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass, testClass)
             .andThen(pipeline.prepareGenerationSourceCode())
+            .andThen(pipeline.confirmGenerationSource())
             .andThen(
                 pipeline.generateCodeSuggestion()
                     .andThen(pipeline.replaceFunctionBody(targetFunction))

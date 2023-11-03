@@ -24,6 +24,8 @@ internal class FusionTDDSettings : SimplePersistentStateComponent<FusionTDDSetti
     var starcoderUseCache by state::starcoderUseCache
 
     var starcoderWaitForModel by state::starcoderWaitForModel
+
+    var isConfirmSourceBeforeGeneration by state::isConfirmSourceBeforeGeneration
 }
 
 internal class FusionTDDSettingsState : BaseState() {
@@ -45,4 +47,6 @@ internal class FusionTDDSettingsState : BaseState() {
     var starcoderUseCache by property(false)
 
     var starcoderWaitForModel by property(true)
+
+    var isConfirmSourceBeforeGeneration by property(false)
 }

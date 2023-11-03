@@ -8,10 +8,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependenc
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactoryService
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.CollectTestsAndUsedReferencesForFunPipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.GenerateCodeSuggestionsPipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.PrepareGenerationSourceCodePipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.ReplaceFunctionBodyPipelineStep
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.*
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNamedFunction
 
@@ -35,6 +32,12 @@ internal class ProjectPipelineStepsFactoryService(
 
     override fun prepareGenerationSourceCode(): PipelineStep<FunctionTestDependencies, CodeBlock> {
         return PrepareGenerationSourceCodePipelineStep(
+            settings = project.service(),
+        )
+    }
+
+    override fun confirmGenerationSource(): PipelineStep<CodeBlock, CodeBlock> {
+        return ConfirmGenerationSourcePipelineStep(
             settings = project.service(),
         )
     }

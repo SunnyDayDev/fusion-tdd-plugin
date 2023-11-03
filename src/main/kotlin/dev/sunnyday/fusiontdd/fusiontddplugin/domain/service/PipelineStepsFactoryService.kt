@@ -17,6 +17,8 @@ internal interface PipelineStepsFactoryService {
 
     fun prepareGenerationSourceCode(): PipelineStep<FunctionTestDependencies, CodeBlock>
 
+    fun confirmGenerationSource(): PipelineStep<CodeBlock, CodeBlock>
+
     fun generateCodeSuggestion(): PipelineStep<CodeBlock, GenerateCodeBlockResult>
 
     fun replaceFunctionBody(function: KtNamedFunction): PipelineStep<GenerateCodeBlockResult, KtNamedFunction>

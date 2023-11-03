@@ -4,10 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
 import com.intellij.testFramework.registerServiceInstance
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.CollectTestsAndUsedReferencesForFunPipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.GenerateCodeSuggestionsPipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.PrepareGenerationSourceCodePipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.ReplaceFunctionBodyPipelineStep
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.*
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -38,6 +35,13 @@ class ProjectPipelineStepsFactoryServiceTest : LightJavaCodeInsightFixtureTestCa
         val actualStep = provider.prepareGenerationSourceCode()
 
         assertThat(actualStep).isInstanceOf(PrepareGenerationSourceCodePipelineStep::class.java)
+    }
+
+    @Test
+    fun `create step for confirmGenerationSource`() {
+        val actualStep = provider.confirmGenerationSource()
+
+        assertThat(actualStep).isInstanceOf(ConfirmGenerationSourcePipelineStep::class.java)
     }
 
     @Test

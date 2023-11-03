@@ -1,6 +1,7 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.pipeline
 
 import com.intellij.openapi.Disposable
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.util.PipelineCancellationException
 import java.util.concurrent.atomic.AtomicInteger
 
 internal fun interface PipelineStep<in Input, out Output> {
@@ -32,6 +33,7 @@ internal fun <Input, Output> PipelineStep<Input, Output>.retry(times: Int): Pipe
 
             override fun invoke(result: Result<Output>) {
                 when {
+                    result.exceptionOrNull() is PipelineCancellationException -> observer.invoke(result)
                     result.isSuccess -> observer.invoke(result)
                     counter.getAndIncrement() < times -> execute(input, this)
                     else -> observer.invoke(result)
