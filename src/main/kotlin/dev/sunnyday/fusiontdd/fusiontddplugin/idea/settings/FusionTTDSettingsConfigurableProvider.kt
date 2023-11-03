@@ -28,23 +28,16 @@ internal class FusionTTDSettingsConfigurable(
         return panel {
             group("Project Config") {
                 row {
-                    textField()
+                    passwordField()
+                        .applyToComponent { name = settings::authToken.name }
                         .label("Starcoder auth token")
                         .align(Align.FILL)
-                        .bindText(
-                            getter = { "**********" },
-                            setter = { tokenValue ->
-                                when {
-                                    tokenValue == "**********" -> Unit
-                                    tokenValue.isBlank() -> settings.authToken = null
-                                    else -> settings.authToken = tokenValue
-                                }
-                            }
-                        )
+                        .bindText(settings::authToken.orEmpty(), settings::authToken::set)
                 }
 
                 row {
                     textField()
+                        .applyToComponent { name = settings::projectPackage.name }
                         .label("Project package")
                         .align(Align.FILL)
                         .bindText(settings::projectPackage.orEmpty(), settings::projectPackage::set)
@@ -54,6 +47,7 @@ internal class FusionTTDSettingsConfigurable(
             group("Starcoder Config") {
                 row {
                     textField()
+                        .applyToComponent { name = settings::starcoderModel.name }
                         .label("Model")
                         .align(Align.FILL)
                         .bindText(settings::starcoderModel.orEmpty(), settings::starcoderModel::set)
@@ -61,6 +55,7 @@ internal class FusionTTDSettingsConfigurable(
 
                 row {
                     slider(0, 500, 50, 100)
+                        .applyToComponent { name = settings::starcoderMaxNewTokens.name }
                         .label("Max new tokens")
                         .showValueHint()
                         .comment(
@@ -76,6 +71,7 @@ internal class FusionTTDSettingsConfigurable(
                 row {
                     val temperatureFormat = DecimalFormat("#.##")
                     textField()
+                        .applyToComponent { name = settings::starcoderTemperature.name }
                         .label("Temperature")
                         .validationOnInput { field ->
                             val parseResult = runCatching { temperatureFormat.parse(field.text) }
@@ -94,12 +90,13 @@ internal class FusionTTDSettingsConfigurable(
                         .align(Align.FILL)
                         .bindText(
                             getter = { temperatureFormat.format(settings.starcoderTemperature) },
-                            setter = { temperatureFormat.parse(it).toFloat() }
+                            setter = { settings.starcoderTemperature = temperatureFormat.parse(it).toFloat() }
                         )
                 }
 
                 row {
                     checkBox("Do sample")
+                        .applyToComponent { name = settings::starcoderDoSample.name }
                         .comment(
                             comment = "Whether or not to use sampling, use greedy decoding otherwise.",
                         )
@@ -108,6 +105,7 @@ internal class FusionTTDSettingsConfigurable(
 
                 row {
                     checkBox("Use cache")
+                        .applyToComponent { name = settings::starcoderUseCache.name }
                         .comment(
                             comment = "There is a cache layer on the inference API " +
                                     "to speedup requests we have already seen. " +
@@ -122,6 +120,7 @@ internal class FusionTTDSettingsConfigurable(
 
                 row {
                     checkBox("Wait for model")
+                        .applyToComponent { name = settings::starcoderWaitForModel.name }
                         .comment(
                             comment = "If the model is not ready, wait for it instead of receiving 503. " +
                                     "It limits the number of requests required to get your inference done. " +
@@ -133,11 +132,24 @@ internal class FusionTTDSettingsConfigurable(
 
                 row {
                     checkBox("Add tests comments before generation")
+                        .applyToComponent { name = settings::isAddTestCommentsBeforeGeneration.name }
                         .comment(
                             comment = "If enabled, all used tests names will be collected " +
                                     "and places as a comment before the generating function.",
                         )
                         .bindSelected(settings::isAddTestCommentsBeforeGeneration)
+                }
+            }
+
+            group("Developer Settings") {
+                row {
+                    checkBox("Confirm generation source before request")
+                        .applyToComponent { name = settings::isConfirmSourceBeforeGeneration.name }
+                        .comment(
+                            comment = "If enabled, the source will be displayed for viewing and editing " +
+                                    "before sending a request to generate the result.",
+                        )
+                        .bindSelected(settings::isConfirmSourceBeforeGeneration)
                 }
             }
         }
