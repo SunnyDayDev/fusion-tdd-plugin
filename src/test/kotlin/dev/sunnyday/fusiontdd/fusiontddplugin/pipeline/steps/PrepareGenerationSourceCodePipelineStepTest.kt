@@ -161,6 +161,41 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
         )
     }
 
+    @Test
+    fun `print local classes`() {
+        fixture.copyFileToProject("collect/local_class/Owner.kt")
+        fixture.copyFileToProject("collect/local_class/TargetClass.kt")
+        fixture.copyFileToProject("collect/local_class/TargetClassTest.kt")
+
+        val dependencies = runReadAction {
+            val targetClass = fixture.getClass("project.TargetClass")
+            val targetFunction = targetClass.getNamedFunction("targetFun")
+            val testClass = fixture.getClass("project.TargetClassTest")
+
+            FunctionTestDependencies(
+                function = targetFunction,
+                testClass = testClass,
+                usedClasses = listOf(
+                    fixture.getClass("project.Owner"),
+                ),
+                usedReferences = listOf(
+                    fixture.getClass("project.Owner.Local"),
+                )
+            )
+        }
+
+        val result = runReadAction { step.executeAndWait(dependencies) }
+
+        assertThat(result.getOrNull()?.rawText.orEmpty()).isEqualTo(
+            """
+                class Owner(val local: Local) {
+                
+                    class Local(val value: Int) {}
+                }
+            """.trimIndent()
+        )
+    }
+
     private fun getPrintFunctionTestDependencies(
         build: FunctionTestDependenciesBuilder.() -> Unit = {}
     ): FunctionTestDependencies {

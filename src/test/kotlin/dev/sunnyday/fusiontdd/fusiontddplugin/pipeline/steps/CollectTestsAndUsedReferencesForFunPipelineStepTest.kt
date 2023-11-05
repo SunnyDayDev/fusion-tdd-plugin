@@ -75,4 +75,43 @@ class CollectTestsAndUsedReferencesForFunPipelineStepTest : LightJavaCodeInsight
             )
         }
     }
+
+    @Test
+    fun `collect dependencies of local_class`() {
+        fixture.copyFileToProject("collect/local_class/Owner.kt")
+        fixture.copyFileToProject("collect/local_class/TargetClass.kt")
+        fixture.copyFileToProject("collect/local_class/TargetClassTest.kt")
+
+        runReadAction {
+            val targetClass = fixture.getClass("project.TargetClass")
+            val targetFunction = targetClass.getNamedFunction("targetFun")
+            val testClass = fixture.getClass("project.TargetClassTest")
+
+            val step = CollectTestsAndUsedReferencesForFunPipelineStep(
+                targetClass = targetClass,
+                targetFunction = targetFunction,
+                testClass = testClass,
+                settings = settings,
+            )
+
+            val dependencies = step.executeAndWait()
+
+            assertThat(dependencies.getOrNull()).isEqualTo(
+                FunctionTestDependencies(
+                    function = targetFunction,
+                    testClass = testClass,
+                    usedClasses = listOf(
+                        testClass,
+                        fixture.getClass("project.Owner"),
+                        targetClass,
+                    ),
+                    usedReferences = listOf(
+                        targetFunction,
+                        testClass.getNamedFunction("test targetFun"),
+                        fixture.getClass("project.Owner.Local"),
+                    )
+                )
+            )
+        }
+    }
 }

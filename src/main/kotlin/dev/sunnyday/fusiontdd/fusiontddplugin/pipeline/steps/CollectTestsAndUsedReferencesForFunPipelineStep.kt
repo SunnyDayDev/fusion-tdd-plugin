@@ -126,12 +126,21 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
 
         override fun visitElement(element: PsiElement) {
             if (element is KtNameReferenceExpression) {
-
                 when (val reference = element.mainReference.resolve()) {
                     is KtClass -> {
-                        val fqName = reference.fqName?.toString().orEmpty()
-                        if (fqName.startsWith(settings.projectPackage.orEmpty())) {
+                        if (reference.isScannable()) {
                             usedClasses.add(reference)
+                        }
+                    }
+
+                    is KtConstructor<*> -> {
+                        val constructedClass = reference.parent as? KtClass
+                        if (constructedClass != null && constructedClass.isScannable()) {
+                            if (constructedClass.isTopLevel()) {
+                                usedClasses.add(constructedClass)
+                            } else {
+                                usedReferences.add(constructedClass)
+                            }
                         }
                     }
 
@@ -140,8 +149,7 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
                             (reference.context is KtClassBody || reference.context is KtFile) &&
                             usedReferences.add(reference)
                         ) {
-                            val fqName = reference.kotlinFqName?.toString().orEmpty()
-                            if (fqName.startsWith(settings.projectPackage.orEmpty())) {
+                            if (reference.isScannable()) {
                                 checkQueue.add(reference)
                             }
                         }
@@ -150,6 +158,11 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
             }
 
             super.visitElement(element)
+        }
+
+        private fun PsiElement?.isScannable(): Boolean {
+            val fqName = this?.kotlinFqName?.toString().orEmpty()
+            return fqName.startsWith(settings.projectPackage.orEmpty())
         }
     }
 }
