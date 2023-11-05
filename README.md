@@ -2,6 +2,9 @@
 [![Coverage status](https://img.shields.io/endpoint?url=https://kvdb.io/PY9VzGdCHe8YPbKvepE4y4/fustion-tdd-plugin.main.coverage&logo=TeamCity)](https://ci.sunnyday.dev/buildConfiguration/FusionTDD_Test/lastFinished?buildTab=tests&branch=%3Cdefault%3E)
 ![Release status](https://img.shields.io/badge/status-pre--alpha-red)
 
+[![Readme en](https://img.shields.io/badge/readme-en-green)](https://github.com/SunnyDayDev/fusion-tdd-plugin/blob/main/README.md)
+[![Readme ru](https://img.shields.io/badge/readme-ru-green)](https://github.com/SunnyDayDev/fusion-tdd-plugin/blob/main/docs/README.ru.md)
+
 ### What is it
 A plugin for generating product code using tests written in advance for it. It is expected to become an indispensable assistant in TDD/BDD coding styles.
 
@@ -10,7 +13,7 @@ The plugin is at an early stage of development. Don't use it to solve real probl
 It currently works **only with Kotlin projects**.
 
 ### How to use
-The easiest way to try is to pull the project and run `./gradlew runIde`.
+The easiest way to try is to pull the project and run `./gradlew runIde` in the project's root directory. You can also run `./gradlew buildPlugin` and install the resulting plugin into an existing version of IntelliJ,`Settings -> Pluggins -> Install Plugin from disk...`, specifying the path to the created plugin `build/distributions/FusionTDDPlugin-*.zip`.
 
 But firstly, you need to get a token from the [HuggingFace](https://huggingface.co/settings/tokens).
 
