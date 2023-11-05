@@ -3,11 +3,11 @@
 ![Release status](https://img.shields.io/badge/status-pre--alpha-red)
 
 ### What is it
-A plugin for generating product code using tests written in advance for it. It is expected that it will become an indispensable assistant in TDD/BDD styles of coding.
+A plugin for generating product code using tests written in advance for it. It is expected to become an indispensable assistant in TDD/BDD coding styles.
 
-### State
-The plugin is in an early stage of development. You shouldn't use it on real problems, just try it on dummy and suggest improvements.
-Currently it works **only with Kotlin** projects.
+### Project status
+The plugin is at an early stage of development. Don't use it to solve real problems, just try it on a dummy and suggest improvements.
+It currently works **only with Kotlin projects**.
 
 ### How to use
 The easiest way to try is to pull the project and run `./gradlew runIde`.
@@ -18,7 +18,7 @@ Enter the received token into the plugin settings. You also need to fill out you
 
 <img src="docs/resources/minimal_required_settings.png" width="700" alt="Token and project package placed in text fields"/>
 
-Further, in the IDE, create a project, create a Kotlin class, a target function with an empty body, write tests for it and start generation.
+Further, create a project in the IDE, create a Kotlin class, a target function with an empty body, write tests for it and start generation.
 
 <img src="docs/resources/fusion_tdd_simple_trailer.gif" alt="Animated example of usage"/>
 
