@@ -18,10 +18,10 @@
 
 Введите полученный токен в окне настроек плагина. Также вам необходимо указать пакет проекта, лишь классы этого пакета будут сканироваться для сбора контекста генерации.
 
-<img src="docs/resources/minimal_required_settings.png" width="700" alt="Token and project package placed in text fields"/>
+<img src="resources/minimal_required_settings.png" width="700" alt="Token and project package placed in text fields"/>
 
 Далее, в IDE, создайте проект, создайте Kotlin класс, целевую функцию с пустым телом, напишите на нее тесты и запустите генерацию.
 
-<img src="docs/resources/fusion_tdd_simple_trailer.gif" alt="Animated example of usage"/>
+<img src="resources/fusion_tdd_simple_trailer.gif" alt="Animated example of usage"/>
 
 Наслаждайтесь и предлагайте улучшения!
