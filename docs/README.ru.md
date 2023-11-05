@@ -2,6 +2,9 @@
 [![Coverage status](https://img.shields.io/endpoint?url=https://kvdb.io/PY9VzGdCHe8YPbKvepE4y4/fustion-tdd-plugin.main.coverage&logo=TeamCity)](https://ci.sunnyday.dev/buildConfiguration/FusionTDD_Test/lastFinished?buildTab=tests&branch=%3Cdefault%3E)
 ![Release status](https://img.shields.io/badge/status-pre--alpha-red)
 
+[![Readme en](https://img.shields.io/badge/readme-en-green)](https://github.com/SunnyDayDev/fusion-tdd-plugin/blob/main/README.md)
+[![Readme ru](https://img.shields.io/badge/readme-ru-green)](https://github.com/SunnyDayDev/fusion-tdd-plugin/blob/main/docs/README.ru.md)
+
 ### Что это
 Плагин для генерации продуктового кода на основе написанных для него тестов. Ожидается, что он сможет стать незаменимым помошником при написании кода в TDD/BDD стилях.
 
