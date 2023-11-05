@@ -78,10 +78,18 @@ internal class PrepareGenerationSourceCodePipelineStep(
                     append(declaration.prevSibling.text.substringAfterLast('\n'))
                 }
 
-                if (declaration == input.function) {
-                    printTargetFunction(input)
-                } else {
-                    appendLine(declaration.text)
+                when (declaration) {
+                    is KtClass -> {
+                        printClass(declaration, input)
+                        appendLine()
+                    }
+                    else -> {
+                        if (declaration == input.function) {
+                            printTargetFunction(input)
+                        } else {
+                            appendLine(declaration.text)
+                        }
+                    }
                 }
             }
         }
