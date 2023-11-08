@@ -1,8 +1,8 @@
 plugins {
     id("java")
     kotlin("jvm") version "1.9.0"
-    id("org.jetbrains.intellij") version "1.16.0"
     kotlin("plugin.serialization") version "1.9.0"
+    id("org.jetbrains.intellij") version "1.16.0"
 }
 
 group = "dev.sunnyday.fusiontdd"
@@ -58,19 +58,16 @@ tasks {
 dependencies {
     implementation(kotlin("reflect"))
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.7.3")
-
     implementation("io.ktor:ktor-client-core:2.3.5")
     implementation("io.ktor:ktor-client-okhttp:2.3.5")
+    implementation("io.ktor:ktor-client-okhttp-jvm:2.3.5")
     implementation("io.ktor:ktor-client-content-negotiation:2.3.5")
     implementation("io.ktor:ktor-client-logging-jvm:2.3.5")
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.5")
 
-    implementation("org.slf4j:slf4j-api:2.0.9")
-
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
-    implementation("io.ktor:ktor-client-okhttp-jvm:2.3.5")
+
+    implementation("org.slf4j:slf4j-api:2.0.9")
 
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("io.mockk:mockk:1.13.8")

@@ -12,6 +12,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.test.getNamedFunction
 import io.mockk.every
 import io.mockk.mockk
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.math.max
@@ -162,6 +163,41 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
     }
 
     @Test
+    fun `if isAddTestCommentsBeforeGeneration enabled and real comment exists, append comments extracted from test titles`() {
+        every { settings.isAddTestCommentsBeforeGeneration } returns true
+
+        val deps = getPrintFunctionTestDependencies {
+            val targetClass = fixture.getClass("project.TargetClass")
+            val testClass = fixture.getClass("project.TestClass")
+
+            setTargetFunction(targetClass.getNamedFunction("targetFunctionWithComment"))
+            setUsedClasses(targetClass)
+            setUsedReferences(
+                targetClass.getNamedFunction("targetFunctionWithComment"),
+                testClass.getNamedFunction("test target fun with comment"),
+            )
+        }
+
+        val result = runReadAction { step.executeAndWait(deps) }
+
+        assertThat(result.getOrNull()?.rawText.orEmpty()).isEqualTo(
+            """
+                class TargetClass {
+                
+                    /**
+                     * Function real comment.
+                     *
+                     * test target fun with comment
+                     */
+                    fun targetFunctionWithComment() {
+                        -GENERATE_HERE-
+                    }
+                }
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun `print local classes`() {
         fixture.copyFileToProject("collect/local_class/Owner.kt")
         fixture.copyFileToProject("collect/local_class/TargetClass.kt")
@@ -190,7 +226,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             """
                 class Owner(val local: Local) {
                 
-                    class Local(val value: Int) {}
+                    class Local(val value: Int)
                 }
             """.trimIndent()
         )
@@ -207,7 +243,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
         return runReadAction {
             val targetClass = fixture.getClass("project.TargetClass")
-            val targetFun = targetClass.getNamedFunction("targetFunction")
+            var targetFun = targetClass.getNamedFunction("targetFunction")
 
             val klass1 = fixture.getClass("project.Class1")
             val klass2 = fixture.getClass("project.Class2")
@@ -218,6 +254,10 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             var usedReferences = emptyList<PsiElement>()
 
             val builder = object : FunctionTestDependenciesBuilder {
+
+                override fun setTargetFunction(function: KtNamedFunction) {
+                    targetFun = function
+                }
 
                 override fun setUsedClasses(vararg classes: KtClass) {
                     usedClasses = classes.toList()
@@ -240,6 +280,8 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
     }
 
     private interface FunctionTestDependenciesBuilder {
+
+        fun setTargetFunction(function: KtNamedFunction)
 
         fun setUsedClasses(vararg classes: KtClass)
 

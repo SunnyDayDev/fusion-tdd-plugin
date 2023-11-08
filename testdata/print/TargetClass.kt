@@ -10,6 +10,13 @@ class TargetClass {
         // do nothing
     }
 
+    /**
+     * Function real comment.
+     */
+    fun targetFunctionWithComment() {
+        // do nothing
+    }
+
     fun otherFunction() {
         println("Hey!")
     }

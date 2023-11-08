@@ -1,12 +1,16 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps
 
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
+import org.jetbrains.kotlin.idea.util.CommentSaver.Companion.tokenType
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 
 internal class PrepareGenerationSourceCodePipelineStep(
@@ -21,12 +25,12 @@ internal class PrepareGenerationSourceCodePipelineStep(
         logger.debug("Pipeline: Prepare generation source for ${input.function.name}")
 
         val result = runCatching {
-            val testClassString = buildString {
+            val generationSourceString = buildString {
                 printImports(input)
-                printClasses(input)
+                printUsedClasses(input)
             }
 
-            CodeBlock(testClassString)
+            CodeBlock(generationSourceString)
         }
 
         observer.invoke(result)
@@ -43,7 +47,8 @@ internal class PrepareGenerationSourceCodePipelineStep(
             val file = klass.containingKtFile
             if (visitedFiles.add(file)) {
                 file.importDirectives.forEach { directive ->
-                    if (directive.importPath?.fqName?.toString() in usedImports) {
+                    val importPath = directive.importPath?.fqName?.toString()
+                    if (importPath in usedImports) {
                         appendLine(directive.text)
                     }
                 }
@@ -51,57 +56,49 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun StringBuilder.printClasses(input: FunctionTestDependencies) {
+    private fun StringBuilder.printUsedClasses(input: FunctionTestDependencies) {
         input.usedClasses.forEach { klass ->
             if (isNotEmpty()) {
                 appendLine()
                 appendLine()
             }
 
-            printClass(klass, input)
+            printUsedClass(klass, input)
         }
     }
 
-    private fun StringBuilder.printClass(klass: KtClass, input: FunctionTestDependencies) {
-        printClassTitle(klass)
+    private fun StringBuilder.printUsedClass(
+        klass: KtClass,
+        input: FunctionTestDependencies,
+    ) {
+        printClassTitleWithPrimaryConstructor(klass)
 
-        appendLine("{")
         var isEmpty = true
 
         klass.declarations.forEach { declaration ->
             if (declaration in input.usedReferences) {
-                isEmpty = false
+                if (isEmpty) {
+                    isEmpty = false
+                    appendLine("{")
+                }
 
                 appendLine()
+                append(declaration.getPreviousWhiteSpaceIndent())
 
-                if (declaration.prevSibling is PsiWhiteSpace) {
-                    append(declaration.prevSibling.text.substringAfterLast('\n'))
-                }
-
-                when (declaration) {
-                    is KtClass -> {
-                        printClass(declaration, input)
-                        appendLine()
-                    }
-                    else -> {
-                        if (declaration == input.function) {
-                            printTargetFunction(input)
-                        } else {
-                            appendLine(declaration.text)
-                        }
-                    }
-                }
+                printClassDeclarationItem(declaration, input)
             }
         }
 
-        if (isEmpty) {
-            deleteAt(lastIndex)
+        if (!isEmpty) {
+            append("}")
+        } else {
+            while (last() == ' ') {
+                deleteAt(lastIndex)
+            }
         }
-
-        append("}")
     }
 
-    private fun StringBuilder.printClassTitle(klass: KtClass) {
+    private fun StringBuilder.printClassTitleWithPrimaryConstructor(klass: KtClass) {
         var titleElement = klass.firstChild
         while (titleElement !== klass.body) {
             if (
@@ -114,42 +111,62 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun StringBuilder.printTargetFunction(input: FunctionTestDependencies) {
-        if (settings.isAddTestCommentsBeforeGeneration) {
-            printTargetFunctionComment(input)
-        }
+    private fun StringBuilder.printClassDeclarationItem(declaration: KtDeclaration, input: FunctionTestDependencies) {
+        when (declaration) {
+            is KtClass -> {
+                printUsedClass(declaration, input)
+                appendLine()
+            }
 
+            else -> {
+                if (declaration == input.function) {
+                    printTargetFunction(input)
+                } else {
+                    appendLine(declaration.text)
+                }
+            }
+        }
+    }
+
+    private fun StringBuilder.printTargetFunction(input: FunctionTestDependencies) {
+        var isTestCommentsAdded = !settings.isAddTestCommentsBeforeGeneration
         var functionElement = input.function.firstChild
-        while (functionElement != null && functionElement !is KtBlockExpression) {
+
+        while (functionElement != null && functionElement.nextSibling != null) {
+            if (!isTestCommentsAdded) {
+                isTestCommentsAdded = printTargetFunctionTestCommentsIfNeedIt(functionElement, input)
+            }
+
             append(functionElement.text)
 
             functionElement = functionElement.nextSibling
         }
 
-        if (functionElement !is KtBlockExpression) {
-            return
+        when (functionElement) {
+            is KtBlockExpression -> printTargetFunctionBody(functionElement)
         }
-
-        appendLine(functionElement.lBrace?.text.orEmpty())
-
-        val indentWhiteSpace = (functionElement.lBrace?.nextSibling as? PsiWhiteSpace)
-            ?.text?.substringAfterLast('\n')
-
-        append(indentWhiteSpace)
-        appendLine(CodeBlock.GENERATE_HERE_TAG)
-
-        val rBraceIndentWhiteSpace =
-            (functionElement.rBrace?.prevSibling as? PsiWhiteSpace)
-                ?.text?.substringAfterLast('\n')
-        append(rBraceIndentWhiteSpace)
-        appendLine(functionElement.rBrace?.text.orEmpty())
     }
 
-    private fun StringBuilder.printTargetFunctionComment(
+    private fun StringBuilder.printTargetFunctionTestCommentsIfNeedIt(
+        functionElement: PsiElement,
         input: FunctionTestDependencies,
+    ): Boolean {
+        val isFirstFunDeclarationElement = functionElement is KtModifierList ||
+                functionElement.tokenType == KtTokens.FUN_KEYWORD
+
+        return if (isFirstFunDeclarationElement && settings.isAddTestCommentsBeforeGeneration) {
+            printTargetFunctionTestComments(input, functionElement)
+            true
+        } else {
+            false
+        }
+    }
+
+    private fun StringBuilder.printTargetFunctionTestComments(
+        input: FunctionTestDependencies,
+        firstFunDeclarationElement: PsiElement,
     ) {
-        val functionIndentWhiteSpace = (input.function.prevSibling as? PsiWhiteSpace)
-            ?.text?.substringAfterLast('\n')
+        val functionIndentWhiteSpace = input.function.getPreviousWhiteSpaceIndent()
 
         val usedReferencesSet = input.usedReferences.toSet()
 
@@ -158,7 +175,12 @@ internal class PrepareGenerationSourceCodePipelineStep(
             .map { it.name }
 
         if (testTitles.isNotEmpty()) {
-            appendLine("/**")
+            if (firstFunDeclarationElement.prevSibling?.prevSibling is KDoc) {
+                deleteRange(lastIndexOf("/"), length)
+                appendLine()
+            } else {
+                appendLine("/**")
+            }
 
             testTitles.forEach { testTitle ->
                 append(functionIndentWhiteSpace)
@@ -177,5 +199,22 @@ internal class PrepareGenerationSourceCodePipelineStep(
             val annotationText = it.text
             testAnnotationRegex.matches(annotationText)
         }
+    }
+
+    private fun StringBuilder.printTargetFunctionBody(functionElement: KtBlockExpression) {
+        appendLine(functionElement.lBrace?.text.orEmpty())
+
+        val indentWhiteSpace = (functionElement.lBrace?.nextSibling as? PsiWhiteSpace)
+            ?.text?.substringAfterLast('\n')
+
+        append(indentWhiteSpace)
+        appendLine(CodeBlock.GENERATE_HERE_TAG)
+
+        append(functionElement.rBrace?.getPreviousWhiteSpaceIndent().orEmpty())
+        appendLine(functionElement.rBrace?.text.orEmpty())
+    }
+
+    private fun PsiElement.getPreviousWhiteSpaceIndent(): String {
+        return (prevSibling as? PsiWhiteSpace)?.text?.substringAfterLast('\n').orEmpty()
     }
 }

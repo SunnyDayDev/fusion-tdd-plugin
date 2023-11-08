@@ -108,10 +108,73 @@ class CollectTestsAndUsedReferencesForFunPipelineStepTest : LightJavaCodeInsight
                     usedReferences = listOf(
                         targetFunction,
                         testClass.getNamedFunction("test targetFun"),
+                        fixture.getClass("project.Owner").primaryConstructor!!,
+                        fixture.getClass("project.Owner.Local").primaryConstructor!!,
                         fixture.getClass("project.Owner.Local"),
                     )
                 )
             )
+        }
+    }
+
+    @Test
+    fun `collect external (or lib) classes as used references, instead used classes`() {
+        fixture.copyFileToProject("collect/lib_class/LibClass.kt")
+        fixture.copyFileToProject("collect/lib_class/TargetClass.kt")
+        fixture.copyFileToProject("collect/lib_class/TargetClassTest.kt")
+
+        runReadAction {
+            val targetClass = fixture.getClass("project.TargetClass")
+            val targetFunction = targetClass.getNamedFunction("targetFun")
+            val testClass = fixture.getClass("project.TargetClassTest")
+
+            val step = CollectTestsAndUsedReferencesForFunPipelineStep(
+                targetClass = targetClass,
+                targetFunction = targetFunction,
+                testClass = testClass,
+                settings = settings,
+            )
+
+            val externalLibClass = fixture.getClass("lib.LibClass")
+
+            val dependencies = step.executeAndWait().getOrNull()
+
+            assertThat(dependencies?.usedClasses.orEmpty())
+                .doesNotContain(externalLibClass)
+
+            assertThat(dependencies?.usedReferences.orEmpty())
+                .contains(externalLibClass)
+        }
+    }
+
+    @Test
+    fun `collect lib annotations as used references`() {
+        fixture.copyFileToProject("collect/lib_class/LibClass.kt")
+        fixture.copyFileToProject("collect/lib_class/TargetClass.kt")
+        fixture.copyFileToProject("collect/lib_class/TargetClassTest.kt")
+        fixture.copyFileToProject("collect/lib_class/Test.kt")
+
+        runReadAction {
+            val targetClass = fixture.getClass("project.TargetClass")
+            val targetFunction = targetClass.getNamedFunction("targetFun")
+            val testClass = fixture.getClass("project.TargetClassTest")
+
+            val step = CollectTestsAndUsedReferencesForFunPipelineStep(
+                targetClass = targetClass,
+                targetFunction = targetFunction,
+                testClass = testClass,
+                settings = settings,
+            )
+
+            val testAnnotationClass = fixture.getClass("org.junit.jupiter.api.Test")
+
+            val dependencies = step.executeAndWait().getOrNull()
+
+            assertThat(dependencies?.usedClasses.orEmpty())
+                .doesNotContain(testAnnotationClass)
+
+            assertThat(dependencies?.usedReferences.orEmpty())
+                .contains(testAnnotationClass)
         }
     }
 }
