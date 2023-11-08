@@ -38,31 +38,58 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
     private fun collectDependencies(
         usedReferences: MutableCollection<PsiElement>,
     ): FunctionTestDependencies {
-        val classes = mutableSetOf(testClass)
+        val usedClasses = mutableSetOf(testClass)
 
-        val queue = ArrayDeque(usedReferences)
-        while (queue.isNotEmpty()) {
-            val usedElement = queue.remove()
+        val checkQueue = ArrayDeque(usedReferences)
+        while (checkQueue.isNotEmpty()) {
+            val usedElement = checkQueue.remove()
 
             val ownerClass = PsiTreeUtil.getParentOfType(usedElement, KtClass::class.java)
-
             ownerClass?.let { usedClass ->
                 if (usedClass !== testClass && usedClass !== targetClass) {
-                    classes.add(usedClass)
+                    if (usedClass.isScannable()) {
+                        if (usedClass.isTopLevel()) {
+                            usedClasses.add(usedClass)
+                        }
+                    } else {
+                        usedReferences.add(usedClass)
+                    }
                 }
             }
 
-            usedElement.accept(NestedDependenciesCollector(usedReferences, classes, queue))
+            if (usedElement.isScannable()) {
+                collectNestedDependencies(usedElement, usedReferences, usedClasses, checkQueue)
+            }
         }
 
-        classes.add(targetClass)
+        usedClasses.add(targetClass)
 
         return FunctionTestDependencies(
             function = targetFunction,
             testClass = testClass,
-            usedClasses = classes.toList(),
+            usedClasses = usedClasses.toList(),
             usedReferences = usedReferences.toList(),
         )
+    }
+
+    private fun collectNestedDependencies(
+        usedElement: PsiElement,
+        usedReferences: MutableCollection<PsiElement>,
+        usedClasses: MutableCollection<KtClass>,
+        checkQueue: Queue<PsiElement>,
+    ) {
+        when (usedElement) {
+            is KtNamedFunction -> {
+                usedElement.annotationEntries.forEach { annotationEntry ->
+                    val userType = (annotationEntry.typeReference?.typeElement as? KtUserType) ?: return@forEach
+                    val annotationClass =
+                        userType.referenceExpression?.mainReference?.resolve() ?: return@forEach
+                    usedReferences.add(annotationClass)
+                }
+            }
+        }
+
+        usedElement.accept(NestedDependenciesCollector(usedReferences, usedClasses, checkQueue))
     }
 
     inner class FunctionUsageCollector(
@@ -83,9 +110,7 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
             val trackingFunction = trackingFunction ?: return super.visitElement(element)
 
             if (element is KtNameReferenceExpression) {
-                val reference = element.mainReference.resolve()
-
-                when (reference) {
+                when (val reference = element.mainReference.resolve()) {
                     targetFunction -> {
                         if (!isTrackingFunctionUseTargetFunction && usedReferences.add(trackingFunction)) {
                             isTrackingFunctionUseTargetFunction = true
@@ -93,7 +118,17 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
                         }
                     }
 
-                    is KtProperty, is KtNamedFunction -> {
+                    targetClass, null -> {
+                        // no-op
+                    }
+
+                    is KtClass -> {
+                        if (!(reference.isScannable() && reference.isTopLevel())) {
+                            trackingTouchedElements.add(reference)
+                        }
+                    }
+
+                    else -> {
                         trackingTouchedElements.add(reference)
                     }
                 }
@@ -127,42 +162,57 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
         override fun visitElement(element: PsiElement) {
             if (element is KtNameReferenceExpression) {
                 when (val reference = element.mainReference.resolve()) {
-                    is KtClass -> {
-                        if (reference.isScannable()) {
-                            usedClasses.add(reference)
-                        }
-                    }
+                    targetClass -> Unit // no-op
 
-                    is KtConstructor<*> -> {
-                        val constructedClass = reference.parent as? KtClass
-                        if (constructedClass != null && constructedClass.isScannable()) {
-                            if (constructedClass.isTopLevel()) {
-                                usedClasses.add(constructedClass)
-                            } else {
-                                usedReferences.add(constructedClass)
-                            }
-                        }
-                    }
-
-                    is KtProperty, is KtNamedFunction -> {
-                        if (
-                            (reference.context is KtClassBody || reference.context is KtFile) &&
-                            usedReferences.add(reference)
-                        ) {
-                            if (reference.isScannable()) {
-                                checkQueue.add(reference)
-                            }
-                        }
-                    }
+                    is KtClass -> onClassReference(reference)
+                    is KtConstructor<*> -> onConstructorReference(reference)
+                    is KtProperty -> onDeclarationReference(reference)
+                    is KtNamedFunction -> onDeclarationReference(reference)
                 }
             }
 
             super.visitElement(element)
         }
 
-        private fun PsiElement?.isScannable(): Boolean {
-            val fqName = this?.kotlinFqName?.toString().orEmpty()
-            return fqName.startsWith(settings.projectPackage.orEmpty())
+        private fun onClassReference(reference: KtClass) {
+            if (reference.isScannable()) {
+                if (reference.isTopLevel()) {
+                    usedClasses.add(reference)
+                }
+            } else {
+                usedReferences.add(reference)
+            }
         }
+
+        private fun onConstructorReference(reference: KtConstructor<*>) {
+            val constructedClass = reference.parent as? KtClass
+            if (
+                constructedClass != null &&
+                constructedClass !== targetClass &&
+                constructedClass.isScannable()
+            ) {
+                if (constructedClass.isTopLevel()) {
+                    usedClasses.add(constructedClass)
+                } else {
+                    usedReferences.add(constructedClass)
+                }
+            }
+        }
+
+        private fun onDeclarationReference(reference: KtDeclaration) {
+            if (
+                (reference.context is KtClassBody || reference.context is KtFile) &&
+                usedReferences.add(reference)
+            ) {
+                if (reference.isScannable()) {
+                    checkQueue.add(reference)
+                }
+            }
+        }
+    }
+
+    private fun PsiElement?.isScannable(): Boolean {
+        val fqName = this?.kotlinFqName?.toString().orEmpty()
+        return fqName.startsWith(settings.projectPackage.orEmpty())
     }
 }

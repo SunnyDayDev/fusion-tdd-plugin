@@ -15,6 +15,11 @@ class TestClass {
     }
 
     @Test
+    fun `test target fun with comment`() {
+        TargetClass().targetFunctionWithComment()
+    }
+
+    @Test
     fun `test something other`() {
         assertEquals(2, 2)
     }
