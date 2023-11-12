@@ -82,7 +82,8 @@ internal class PrepareGenerationSourceCodePipelineStep(
                     appendLine("{")
                 }
 
-                appendLine()
+                if (declaration !is KtEnumEntry) appendLine()
+
                 append(declaration.getPreviousWhiteSpaceIndent())
 
                 printClassDeclarationItem(declaration, input)
@@ -101,13 +102,21 @@ internal class PrepareGenerationSourceCodePipelineStep(
     private fun StringBuilder.printClassTitleWithPrimaryConstructor(klass: KtClass) {
         var titleElement = klass.firstChild
         while (titleElement !== klass.body) {
-            if (
-                titleElement !is KtDeclarationModifierList &&
-                titleElement.prevSibling !is KtDeclarationModifierList
-            ) {
-                append(titleElement.text)
+            when (titleElement) {
+                is KtDeclarationModifierList -> printClassTitleDeclarationModifierList(titleElement)
+                is PsiWhiteSpace -> if (!last().isWhitespace()) append(titleElement.text)
+                else -> append(titleElement.text)
             }
+
             titleElement = titleElement.nextSibling
+        }
+    }
+
+    private fun StringBuilder.printClassTitleDeclarationModifierList(modifierList: KtModifierList) {
+        when {
+            modifierList.hasModifier(KtTokens.ENUM_KEYWORD) -> append("enum")
+            modifierList.hasModifier(KtTokens.DATA_KEYWORD) -> append("data")
+            modifierList.hasModifier(KtTokens.VALUE_KEYWORD) -> append("value")
         }
     }
 

@@ -4,10 +4,12 @@ import com.google.common.truth.Truth.assertThat
 import com.intellij.openapi.application.runReadAction
 import com.intellij.psi.PsiElement
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
+import com.intellij.testFramework.runInEdtAndWait
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.executeAndWait
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClass
+import dev.sunnyday.fusiontdd.fusiontddplugin.test.getEnumEntry
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getNamedFunction
 import io.mockk.every
 import io.mockk.mockk
@@ -228,6 +230,85 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                 
                     class Local(val value: Int)
                 }
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun `print enum class`() {
+        runInEdtAndWait {
+            fixture.addFileToProject(
+                "src/main/kotlin/EnumValue.kt",
+                """
+                    enum class EnumValue {
+                        One,
+                        Two,
+                    }
+                """.trimIndent()
+            )
+        }
+
+        val dependencies = getPrintFunctionTestDependencies {
+            val enumClass = fixture.getClass("EnumValue")
+            setUsedClasses(enumClass)
+            setUsedReferences(enumClass.getEnumEntry("One"))
+        }
+
+        val result = runReadAction { step.executeAndWait(dependencies) }
+
+        assertThat(result.getOrNull()?.rawText.orEmpty()).isEqualTo(
+            """
+                enum class EnumValue {
+                    One,
+                }
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun `print data class`() {
+        runInEdtAndWait {
+            fixture.addFileToProject(
+                "src/main/kotlin/Data.kt",
+                "data class Data(val value: Int)",
+            )
+        }
+
+        val dependencies = getPrintFunctionTestDependencies {
+            val dataClass = fixture.getClass("Data")
+            setUsedClasses(dataClass)
+            setUsedReferences()
+        }
+
+        val result = runReadAction { step.executeAndWait(dependencies) }
+
+        assertThat(result.getOrNull()?.rawText.orEmpty()).isEqualTo(
+            """
+                data class Data(val value: Int)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun `print value class`() {
+        runInEdtAndWait {
+            fixture.addFileToProject(
+                "src/main/kotlin/Value.kt",
+                "value class Value(val value: Int)",
+            )
+        }
+
+        val dependencies = getPrintFunctionTestDependencies {
+            val valueClass = fixture.getClass("Value")
+            setUsedClasses(valueClass)
+            setUsedReferences()
+        }
+
+        val result = runReadAction { step.executeAndWait(dependencies) }
+
+        assertThat(result.getOrNull()?.rawText.orEmpty()).isEqualTo(
+            """
+                value class Value(val value: Int)
             """.trimIndent()
         )
     }

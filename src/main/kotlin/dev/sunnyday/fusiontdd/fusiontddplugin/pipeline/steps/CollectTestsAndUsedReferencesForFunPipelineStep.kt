@@ -44,6 +44,8 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
         while (checkQueue.isNotEmpty()) {
             val usedElement = checkQueue.remove()
 
+            if (usedElement === targetFunction) continue
+
             val ownerClass = PsiTreeUtil.getParentOfType(usedElement, KtClass::class.java)
             ownerClass?.let { usedClass ->
                 if (usedClass !== testClass && usedClass !== targetClass) {
@@ -94,11 +96,14 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
 
     inner class FunctionUsageCollector(
         private val usedReferences: MutableCollection<PsiElement>,
+        private val visitedTargetClassFunctions: MutableSet<PsiElement> = mutableSetOf(),
     ) : PsiRecursiveElementWalkingVisitor() {
 
         private var trackingFunction: KtNamedFunction? = null
         private var isTrackingFunctionUseTargetFunction = false
         private val trackingTouchedElements = mutableSetOf<PsiElement>()
+
+        private var isTargetFunctionFoundAtLeastOnce = false
 
         override fun visitElement(element: PsiElement) {
             when {
@@ -114,6 +119,7 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
                     targetFunction -> {
                         if (!isTrackingFunctionUseTargetFunction && usedReferences.add(trackingFunction)) {
                             isTrackingFunctionUseTargetFunction = true
+                            isTargetFunctionFoundAtLeastOnce = true
                             usedReferences.add(trackingFunction)
                         }
                     }
@@ -124,6 +130,25 @@ internal class CollectTestsAndUsedReferencesForFunPipelineStep(
 
                     is KtClass -> {
                         if (!(reference.isScannable() && reference.isTopLevel())) {
+                            trackingTouchedElements.add(reference)
+                        }
+                    }
+
+                    is KtNamedFunction -> {
+                        val functionContext = reference.context
+                        if (
+                            functionContext is KtClassBody &&
+                            functionContext.parent === targetClass &&
+                            visitedTargetClassFunctions.add(reference)
+                        ) {
+                            val collector = FunctionUsageCollector(usedReferences, visitedTargetClassFunctions)
+                            reference.accept(collector)
+                            if (collector.isTargetFunctionFoundAtLeastOnce) {
+                                isTrackingFunctionUseTargetFunction = true
+                                isTargetFunctionFoundAtLeastOnce = true
+                                usedReferences.add(trackingFunction)
+                            }
+                        } else {
                             trackingTouchedElements.add(reference)
                         }
                     }

@@ -177,4 +177,56 @@ class CollectTestsAndUsedReferencesForFunPipelineStepTest : LightJavaCodeInsight
                 .contains(testAnnotationClass)
         }
     }
+
+    @Test
+    fun `collect target fun chain`() {
+        fixture.copyFileToProject("collect/chain/simple/Target.kt")
+        fixture.copyFileToProject("collect/chain/simple/TargetTest.kt")
+
+        runReadAction {
+            val targetClass = fixture.getClass("project.Target")
+            val targetFunction = targetClass.getNamedFunction("chainedFun")
+            val testClass = fixture.getClass("project.TargetTest")
+
+            val step = CollectTestsAndUsedReferencesForFunPipelineStep(
+                targetClass = targetClass,
+                targetFunction = targetFunction,
+                testClass = testClass,
+                settings = settings,
+            )
+
+            val dependencies = step.executeAndWait().getOrNull()
+
+            assertThat(dependencies?.usedReferences.orEmpty())
+                .containsAtLeast(
+                    testClass.getNamedFunction("test callerFun"),
+                    targetClass.getNamedFunction("callerFun"),
+                    targetClass.getNamedFunction("chainedFun"),
+                )
+        }
+    }
+
+    @Test
+    fun `don't collect fun chains that called from target fun`() {
+        fixture.copyFileToProject("collect/chain/simple/Target.kt")
+        fixture.copyFileToProject("collect/chain/simple/TargetTest.kt")
+
+        runReadAction {
+            val targetClass = fixture.getClass("project.Target")
+            val targetFunction = targetClass.getNamedFunction("callerFun")
+            val testClass = fixture.getClass("project.TargetTest")
+
+            val step = CollectTestsAndUsedReferencesForFunPipelineStep(
+                targetClass = targetClass,
+                targetFunction = targetFunction,
+                testClass = testClass,
+                settings = settings,
+            )
+
+            val dependencies = step.executeAndWait().getOrNull()
+
+            assertThat(dependencies?.usedReferences.orEmpty())
+                .doesNotContain(targetClass.getNamedFunction("chainedFun"))
+        }
+    }
 }
