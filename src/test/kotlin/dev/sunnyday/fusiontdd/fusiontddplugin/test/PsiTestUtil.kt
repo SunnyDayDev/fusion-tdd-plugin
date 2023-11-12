@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
 import org.jetbrains.kotlin.asJava.elements.FakeFileForLightClass
 import org.jetbrains.kotlin.idea.base.util.projectScope
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.psiUtil.findFunctionByName
@@ -65,4 +66,10 @@ fun KtClass.getNamedFunction(name: String): KtNamedFunction {
 fun KtClass.getProperty(name: String): KtProperty {
     return findPropertyByName(name) as? KtProperty
         ?: error("Can't find required function '$name'")
+}
+
+fun KtClass.getEnumEntry(name: String): KtEnumEntry {
+    return declarations.first { declaration ->
+        declaration is KtEnumEntry && declaration.name == name
+    } as KtEnumEntry
 }
