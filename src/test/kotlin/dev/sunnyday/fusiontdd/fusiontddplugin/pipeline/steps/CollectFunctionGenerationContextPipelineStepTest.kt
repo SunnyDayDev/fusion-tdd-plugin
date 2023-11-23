@@ -96,7 +96,7 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
             assertThat(context.usedClasses)
                 .doesNotContain(getClass("project.Owner.Local"))
 
-            assertThat(context.usedClasses)
+            assertThat(context.usedReferences)
                 .containsAtLeast(
                     getClass("project.Owner.Local").primaryConstructor!!,
                     getClass("project.Owner.Local"),
