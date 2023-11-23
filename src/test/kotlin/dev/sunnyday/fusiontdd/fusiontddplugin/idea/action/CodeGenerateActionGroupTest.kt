@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
 import com.intellij.testFramework.registerServiceInstance
+import com.intellij.testFramework.runInEdtAndGet
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import io.mockk.clearAllMocks
 import io.mockk.every
@@ -34,14 +35,12 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
 
     @BeforeEach
     fun setUp() {
-        targetClassFile = fixture.copyFileToProject("action/enabled/TargetClass.kt").let { file ->
+        targetClassFile = fixture.copyFileToProject("action/enabled/NoTestClass.kt").let { file ->
             runReadAction {
                 file.toPsiFile(fixture.project)
                     .let(::requireNotNull)
             }
         }
-
-        fixture.copyFileToProject("action/enabled/TargetClassTest.kt")
 
         fixture.project.registerServiceInstance(FusionTDDSettings::class.java, settings)
         settings.apply {
@@ -132,6 +131,19 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
     }
 
     @Test
+    fun `if no class function, hide actions`() {
+        targetClassFile = runInEdtAndGet {
+            fixture.copyFileToProject("action/enabled/NoClass.kt")
+                .toPsiFile(fixture.project)
+                .let(::requireNotNull)
+        }
+
+        val actions = runReadAction { actionsGroup.getChildren(action) }
+
+        assertThat(actions).isEmpty()
+    }
+
+    @Test
     fun `if no caret, hide actions`() {
         every { dataContext.getData(LangDataKeys.CARET) } returns null
 
@@ -143,20 +155,6 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
     @Test
     fun `if no element below caret, hide actions`() {
         every { caret.offset } returns 1_000
-
-        val actions = runReadAction { actionsGroup.getChildren(action) }
-
-        assertThat(actions).isEmpty()
-    }
-
-    @Test
-    fun `if target class doesn't have tests, hide actions`() {
-        targetClassFile = fixture.copyFileToProject("action/enabled/NoTestClass.kt").let { file ->
-            runReadAction {
-                file.toPsiFile(fixture.project)
-                    .let(::requireNotNull)
-            }
-        }
 
         val actions = runReadAction { actionsGroup.getChildren(action) }
 
