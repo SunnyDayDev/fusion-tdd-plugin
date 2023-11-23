@@ -1,7 +1,7 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.domain.service
 
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
-import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionGenerationContext
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import org.jetbrains.kotlin.psi.KtClass
@@ -12,10 +12,9 @@ internal interface PipelineStepsFactoryService {
     fun collectTestsAndUsedReferencesForFun(
         targetFunction: KtNamedFunction,
         targetClass: KtClass,
-        testClass: KtClass,
-    ): PipelineStep<Nothing?, FunctionTestDependencies>
+    ): PipelineStep<Nothing?, FunctionGenerationContext>
 
-    fun prepareGenerationSourceCode(): PipelineStep<FunctionTestDependencies, CodeBlock>
+    fun prepareGenerationSourceCode(): PipelineStep<FunctionGenerationContext, CodeBlock>
 
     fun confirmGenerationSource(): PipelineStep<CodeBlock, CodeBlock>
 

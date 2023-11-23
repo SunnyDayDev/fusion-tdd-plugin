@@ -8,10 +8,8 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.findKotlinClass
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
 import org.jetbrains.kotlin.asJava.elements.FakeFileForLightClass
 import org.jetbrains.kotlin.idea.base.util.projectScope
-import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtEnumEntry
-import org.jetbrains.kotlin.psi.KtNamedFunction
-import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
 import org.jetbrains.kotlin.psi.psiUtil.findFunctionByName
 import org.jetbrains.kotlin.psi.psiUtil.findPropertyByName
 
@@ -22,7 +20,13 @@ fun JavaCodeInsightTestFixture.getClass(name: String): KtClass {
 fun JavaCodeInsightTestFixture.getClassFunction(fqName: String): KtNamedFunction {
     val className = fqName.substringBeforeLast('.')
     val functionName = fqName.substringAfterLast('.')
-    return javaFacade.getClass(className).getNamedFunction(functionName)
+    return getClass(className).getNamedFunction(functionName)
+}
+
+fun JavaCodeInsightTestFixture.getClassProperty(fqName: String): KtProperty {
+    val className = fqName.substringBeforeLast('.')
+    val functionName = fqName.substringAfterLast('.')
+    return getClass(className).getProperty(functionName)
 }
 
 fun JavaCodeInsightTestFixture.getHighLevelFun(fileClass: String, name: String): KtNamedFunction {
@@ -72,4 +76,8 @@ fun KtClass.getEnumEntry(name: String): KtEnumEntry {
     return declarations.first { declaration ->
         declaration is KtEnumEntry && declaration.name == name
     } as KtEnumEntry
+}
+
+fun PsiElement.getFirstIfExpression(): KtIfExpression {
+    return requireNotNull(findDescendantOfType<KtIfExpression>())
 }

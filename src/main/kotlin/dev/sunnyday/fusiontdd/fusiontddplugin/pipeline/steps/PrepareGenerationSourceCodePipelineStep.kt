@@ -2,9 +2,11 @@ package dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiRecursiveElementWalkingVisitor
 import com.intellij.psi.PsiWhiteSpace
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
-import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionTestDependencies
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionGenerationContext
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.PsiElementContentFilter
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
@@ -15,14 +17,14 @@ import org.jetbrains.kotlin.psi.*
 
 internal class PrepareGenerationSourceCodePipelineStep(
     private val settings: FusionTDDSettings,
-) : PipelineStep<FunctionTestDependencies, CodeBlock> {
+) : PipelineStep<FunctionGenerationContext, CodeBlock> {
 
     private val testAnnotationRegex = Regex("@.*?Test")
 
     private val logger = thisLogger()
 
-    override fun execute(input: FunctionTestDependencies, observer: (Result<CodeBlock>) -> Unit) {
-        logger.debug("Pipeline: Prepare generation source for ${input.function.name}")
+    override fun execute(input: FunctionGenerationContext, observer: (Result<CodeBlock>) -> Unit) {
+        logger.debug("Pipeline: Prepare generation source for ${input.targetFunction?.name}")
 
         val result = runCatching {
             val generationSourceString = buildString {
@@ -36,7 +38,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         observer.invoke(result)
     }
 
-    private fun StringBuilder.printImports(input: FunctionTestDependencies) {
+    private fun StringBuilder.printImports(input: FunctionGenerationContext) {
         val usedImports = input.usedReferences.mapNotNullTo(mutableSetOf()) { reference ->
             reference.kotlinFqName?.toString()
                 ?.takeIf { !it.startsWith(settings.projectPackage.orEmpty()) }
@@ -56,7 +58,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun StringBuilder.printUsedClasses(input: FunctionTestDependencies) {
+    private fun StringBuilder.printUsedClasses(input: FunctionGenerationContext) {
         input.usedClasses.forEach { klass ->
             if (isNotEmpty()) {
                 appendLine()
@@ -69,7 +71,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
     private fun StringBuilder.printUsedClass(
         klass: KtClass,
-        input: FunctionTestDependencies,
+        input: FunctionGenerationContext,
     ) {
         printClassTitleWithPrimaryConstructor(klass)
 
@@ -120,7 +122,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun StringBuilder.printClassDeclarationItem(declaration: KtDeclaration, input: FunctionTestDependencies) {
+    private fun StringBuilder.printClassDeclarationItem(declaration: KtDeclaration, input: FunctionGenerationContext) {
         when (declaration) {
             is KtClass -> {
                 printUsedClass(declaration, input)
@@ -128,18 +130,18 @@ internal class PrepareGenerationSourceCodePipelineStep(
             }
 
             else -> {
-                if (declaration == input.function) {
-                    printTargetFunction(input)
+                if (declaration == input.targetFunction) {
+                    printTargetFunction(input.targetFunction, input)
                 } else {
-                    appendLine(declaration.text)
+                    printFilterableElement(declaration, input)
                 }
             }
         }
     }
 
-    private fun StringBuilder.printTargetFunction(input: FunctionTestDependencies) {
+    private fun StringBuilder.printTargetFunction(targetFunction: KtFunction, input: FunctionGenerationContext) {
         var isTestCommentsAdded = !settings.isAddTestCommentsBeforeGeneration
-        var functionElement = input.function.firstChild
+        var functionElement = targetFunction.firstChild
 
         while (functionElement != null && functionElement.nextSibling != null) {
             if (!isTestCommentsAdded) {
@@ -158,7 +160,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
     private fun StringBuilder.printTargetFunctionTestCommentsIfNeedIt(
         functionElement: PsiElement,
-        input: FunctionTestDependencies,
+        input: FunctionGenerationContext,
     ): Boolean {
         val isFirstFunDeclarationElement = functionElement is KtModifierList ||
                 functionElement.tokenType == KtTokens.FUN_KEYWORD
@@ -172,16 +174,14 @@ internal class PrepareGenerationSourceCodePipelineStep(
     }
 
     private fun StringBuilder.printTargetFunctionTestComments(
-        input: FunctionTestDependencies,
+        input: FunctionGenerationContext,
         firstFunDeclarationElement: PsiElement,
     ) {
-        val functionIndentWhiteSpace = input.function.getPreviousWhiteSpaceIndent()
+        val functionIndentWhiteSpace = input.targetFunction?.getPreviousWhiteSpaceIndent().orEmpty()
 
-        val usedReferencesSet = input.usedReferences.toSet()
-
-        val testTitles = input.testClass.declarations
-            .filter { it is KtNamedFunction && it in usedReferencesSet && hasTestAnnotation(it) }
-            .map { it.name }
+        val testTitles = input.tests.values
+            .flatten()
+            .mapNotNull(KtNamedFunction::getName)
 
         if (testTitles.isNotEmpty()) {
             if (firstFunDeclarationElement.prevSibling?.prevSibling is KDoc) {
@@ -203,13 +203,6 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun hasTestAnnotation(function: KtNamedFunction): Boolean {
-        return function.annotationEntries.any {
-            val annotationText = it.text
-            testAnnotationRegex.matches(annotationText)
-        }
-    }
-
     private fun StringBuilder.printTargetFunctionBody(functionElement: KtBlockExpression) {
         appendLine(functionElement.lBrace?.text.orEmpty())
 
@@ -221,6 +214,161 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
         append(functionElement.rBrace?.getPreviousWhiteSpaceIndent().orEmpty())
         appendLine(functionElement.rBrace?.text.orEmpty())
+    }
+
+    private fun StringBuilder.printFilterableElement(
+        filterableElement: PsiElement,
+        input: FunctionGenerationContext,
+    ) {
+        filterableElement.accept(PrintFilterableElementVisitor(this, input))
+        appendLine()
+    }
+
+    private class PrintFilterableElementVisitor(
+        private val builder: StringBuilder,
+        private val input: FunctionGenerationContext,
+    ) : PrintLeafVisitor(builder) {
+
+        override fun onVisitPrintableElement(element: PsiElement) {
+            val filter = input.branchFilters[element]
+
+            if (filter != null) {
+                onPsiElementContentFilter(filter)
+                skipElement()
+            }
+        }
+
+        private fun onPsiElementContentFilter(filter: PsiElementContentFilter) {
+            when (filter) {
+                is PsiElementContentFilter.If -> onIfBranchFilter(filter)
+            }
+        }
+
+        private fun onIfBranchFilter(filter: PsiElementContentFilter.If) {
+            requireNotNull(filter.expression).accept(IfBranchFilterVisitor(builder, filter, input))
+            skipElement()
+        }
+    }
+
+    private class IfBranchFilterVisitor(
+        private val builder: StringBuilder,
+        private val filter: PsiElementContentFilter.If,
+        private val input: FunctionGenerationContext,
+    ) : PrintLeafVisitor(builder) {
+
+        private val filterUsedBranch = if (filter.isThen) filter.expression.then else filter.expression.`else`
+
+        override fun onVisitPrintableElement(element: PsiElement) {
+            when (element) {
+                // Transform condition
+                filter.expression.condition -> {
+                    printFilteredIfCondition()
+                    skipElement()
+                }
+
+                // Print used branch as other
+                filterUsedBranch -> {
+                    element.accept(PrintFilterableElementVisitor(builder, input))
+                    skipElement()
+                }
+
+                // Skip else keyword
+                filter.expression.elseKeyword -> skipElement()
+
+                // Skip other branch
+                filter.expression.then,
+                filter.expression.`else` -> {
+                    skipElement()
+                }
+
+                // Skip unnecessary whitespaces
+                is PsiWhiteSpace -> {
+                    if (
+                        builder.endsWith(' ') ||
+                        element.nextSibling === filter.expression.elseKeyword ||
+                        element.prevSibling === filter.expression.elseKeyword
+                    ) {
+                        skipElement()
+                    }
+                }
+            }
+        }
+
+        // TODO: use PsiElement api instead of String
+        // TODO: optimize expression else branch transformations (like `some > other` -> `some <= other`)
+        private fun printFilteredIfCondition() {
+            val condition = requireNotNull(filter.expression.condition)
+            val conditionString = buildString { condition.accept(PrintLeafVisitor(this)) }
+                .replace("\n", "")
+                .replace(Regex("! +"), "!")
+                .trim()
+
+            if (filter.isThen) {
+                builder.append(conditionString)
+            } else {
+                if (conditionString.startsWith("!")) {
+                    if (conditionString[1] == '(') {
+                        builder.append(conditionString.substring(2, conditionString.lastIndex))
+                    } else {
+                        builder.append(conditionString.substring(1, conditionString.length))
+                    }
+                } else {
+                    builder.append('!')
+                    if (condition.children.size > 1) {
+                        builder.append('(')
+                        builder.append(conditionString)
+                        builder.append(')')
+                    } else {
+                        builder.append(conditionString)
+                    }
+                }
+            }
+        }
+    }
+
+    private open class PrintLeafVisitor(
+        private val builder: StringBuilder
+    ) : PsiRecursiveElementWalkingVisitor() {
+
+        private var skipElement: PsiElement? = null
+
+        private var currentElement: PsiElement? = null
+
+        protected fun skipElement() {
+            skipElement = currentElement
+        }
+
+        override fun visitElement(element: PsiElement) {
+            currentElement = element
+
+            if (skipElement != null) {
+                super.visitElement(element)
+                return
+            }
+
+            onVisitPrintableElement(element)
+
+            if (skipElement != null) {
+                super.visitElement(element)
+                return
+            }
+
+            if (element.firstChild == null) {
+                builder.append(element.text)
+            }
+
+            super.visitElement(element)
+        }
+
+        protected open fun onVisitPrintableElement(element: PsiElement) = Unit
+
+        override fun elementFinished(element: PsiElement?) {
+            super.elementFinished(element)
+
+            if (element === skipElement) {
+                skipElement = null
+            }
+        }
     }
 
     private fun PsiElement.getPreviousWhiteSpaceIndent(): String {

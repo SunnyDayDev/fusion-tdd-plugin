@@ -12,7 +12,6 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactor
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.getLeftOrNull
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.isRight
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.requireRight
-import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.FusionTDDPsiUtils
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.GeneratingFunctionHighlightAnimatorProvider
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.andThen
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
@@ -59,14 +58,9 @@ class CodeGenerateAction : AnAction() {
         val targetClass = PsiTreeUtil.getParentOfType(targetFunction, KtClass::class.java, false)
             ?: return logCantProceed("isn't a class")
 
-        // TODO: search usages of fun and check is it test
-        val testClass = FusionTDDPsiUtils.getTestClass(project, targetClass)
-            ?: return logCantProceed("doesn't have tests")
-
         proceedGenerateCodeAction(
             targetFunction = targetFunction,
             targetClass = targetClass,
-            testClass = testClass,
             project = project,
             editor = event.dataContext.getData(CommonDataKeys.EDITOR),
         )
@@ -79,7 +73,6 @@ class CodeGenerateAction : AnAction() {
     private fun proceedGenerateCodeAction(
         targetFunction: KtNamedFunction,
         targetClass: KtClass,
-        testClass: KtClass,
         project: Project,
         editor: Editor?,
     ) {
@@ -87,7 +80,7 @@ class CodeGenerateAction : AnAction() {
 
         val pipeline = project.service<PipelineStepsFactoryService>()
 
-        pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass, testClass)
+        pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass)
             .andThen(pipeline.prepareGenerationSourceCode())
             .andThen(pipeline.confirmGenerationSource())
             .andThen(

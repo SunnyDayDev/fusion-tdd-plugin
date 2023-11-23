@@ -39,10 +39,7 @@ class CodeGenerateActionGroup : ActionGroup(), DumbAware {
         val targetFunction = targetFunctionOrReason.getLeftOrNull()
             ?: return EMPTY_ARRAY
 
-        val targetClass = PsiTreeUtil.getParentOfType(targetFunction, KtClass::class.java, false)
-            ?: return EMPTY_ARRAY
-
-        if (!ActionEventUtils.checkClassHasTests(project, targetClass)) {
+        if (PsiTreeUtil.getParentOfType(targetFunction, KtClass::class.java, false) == null) {
             return EMPTY_ARRAY
         }
 

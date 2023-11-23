@@ -25,9 +25,9 @@ class ProjectPipelineStepsFactoryServiceTest : LightJavaCodeInsightFixtureTestCa
 
     @Test
     fun `create step for collectTestsAndUsedReferencesForFun`() {
-        val actualStep = provider.collectTestsAndUsedReferencesForFun(mockk(), mockk(), mockk())
+        val actualStep = provider.collectTestsAndUsedReferencesForFun(mockk(), mockk())
 
-        assertThat(actualStep).isInstanceOf(CollectTestsAndUsedReferencesForFunPipelineStep::class.java)
+        assertThat(actualStep).isInstanceOf(CollectFunctionGenerationContextPipelineStep::class.java)
     }
 
     @Test
