@@ -247,6 +247,92 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     )
 
+    @Test
+    fun `on 'when' with entry branch, collect branch filter`() = executeCollectContextTest(
+        prepareProject = {
+            copyFileToProject("collect/chain/when/When.kt")
+            copyFileToProject("collect/chain/when/WhenTest.kt")
+        },
+        createStep = {
+            CollectFunctionGenerationContextPipelineStep(
+                targetFunction = getClassFunction("project.When.doSome"),
+                targetClass = getClass("project.When"),
+                settings = settings,
+            )
+        },
+        assertStepResult = { context ->
+            val whenExpression = getClass("project.When").getFirstWhenExpression()
+            assertThat(context.branchFilters).containsExactly(
+                whenExpression,
+                PsiElementContentFilter.When(whenExpression, listOf(whenExpression.entries[0]))
+            )
+
+            assertThat(context.usedReferences).apply {
+                doesNotContain(getClassFunction("project.When.doElse"))
+                containsAtLeast(
+                    getClassFunction("project.When.doSome"),
+                    getClassFunction("project.When.doAll"),
+                )
+            }
+        }
+    )
+
+    @Test
+    fun `on 'when' with else branch, collect branch filter`() = executeCollectContextTest(
+        prepareProject = {
+            copyFileToProject("collect/chain/when/When.kt")
+            copyFileToProject("collect/chain/when/WhenTest.kt")
+        },
+        createStep = {
+            CollectFunctionGenerationContextPipelineStep(
+                targetFunction = getClassFunction("project.When.doElse"),
+                targetClass = getClass("project.When"),
+                settings = settings,
+            )
+        },
+        assertStepResult = { context ->
+            val whenExpression = getClass("project.When").getFirstWhenExpression()
+            assertThat(context.branchFilters).containsExactly(
+                whenExpression,
+                PsiElementContentFilter.When(whenExpression, listOf(whenExpression.entries[2]))
+            )
+
+            assertThat(context.usedReferences).apply {
+                doesNotContain(getClassFunction("project.When.doSome"))
+                containsAtLeast(
+                    getClassFunction("project.When.doElse"),
+                    getClassFunction("project.When.doAll"),
+                )
+            }
+        }
+    )
+
+    @Test
+    fun `on 'when' with all branches, don't collect branch filter`() = executeCollectContextTest(
+        prepareProject = {
+            copyFileToProject("collect/chain/when/When.kt")
+            copyFileToProject("collect/chain/when/WhenTest.kt")
+        },
+        createStep = {
+            CollectFunctionGenerationContextPipelineStep(
+                targetFunction = getClassFunction("project.When.doAll"),
+                targetClass = getClass("project.When"),
+                settings = settings,
+            )
+        },
+        assertStepResult = { context ->
+            assertThat(context.branchFilters).isEmpty()
+
+            assertThat(context.usedReferences).apply {
+                containsAtLeast(
+                    getClassFunction("project.When.doSome"),
+                    getClassFunction("project.When.doAll"),
+                    getClassFunction("project.When.doElse"),
+                )
+            }
+        }
+    )
+
     private fun executeCollectContextTest(
         prepareProject: JavaCodeInsightTestFixture.() -> Unit,
         createStep: JavaCodeInsightTestFixture.() -> CollectFunctionGenerationContextPipelineStep,

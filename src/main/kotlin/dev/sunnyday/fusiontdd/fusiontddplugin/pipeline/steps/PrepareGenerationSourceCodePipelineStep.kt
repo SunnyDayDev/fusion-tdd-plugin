@@ -12,14 +12,13 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
 import org.jetbrains.kotlin.idea.util.CommentSaver.Companion.tokenType
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
+import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 
 internal class PrepareGenerationSourceCodePipelineStep(
     private val settings: FusionTDDSettings,
 ) : PipelineStep<FunctionGenerationContext, CodeBlock> {
-
-    private val testAnnotationRegex = Regex("@.*?Test")
 
     private val logger = thisLogger()
 
@@ -105,8 +104,8 @@ internal class PrepareGenerationSourceCodePipelineStep(
         var titleElement = klass.firstChild
         while (titleElement !== klass.body) {
             when (titleElement) {
-                is KtDeclarationModifierList -> printClassTitleDeclarationModifierList(titleElement)
-                is PsiWhiteSpace -> if (!last().isWhitespace()) append(titleElement.text)
+                is KtDeclarationModifierList -> printClassTitleDeclarationModifierList(titleElement, klass)
+                is PsiWhiteSpace -> if (isNotEmpty() && !last().isWhitespace()) append(titleElement.text)
                 else -> append(titleElement.text)
             }
 
@@ -114,11 +113,38 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun StringBuilder.printClassTitleDeclarationModifierList(modifierList: KtModifierList) {
-        when {
-            modifierList.hasModifier(KtTokens.ENUM_KEYWORD) -> append("enum")
-            modifierList.hasModifier(KtTokens.DATA_KEYWORD) -> append("data")
-            modifierList.hasModifier(KtTokens.VALUE_KEYWORD) -> append("value")
+    private fun StringBuilder.printClassTitleDeclarationModifierList(modifierList: KtModifierList, klass: KtClass) {
+        val allowedModifiers = getClassDeclarationAllowedModifiers(klass)
+        printClassTitleDeclarationModifierList(modifierList, allowedModifiers)
+    }
+
+    private fun getClassDeclarationAllowedModifiers(klass: KtClass): Set<KtModifierKeywordToken> {
+        return if (klass.isTopLevel()) {
+            TOP_LEVEL_CLASS_ALLOWED_MODIFIERS
+        } else {
+            LOCAL_CLASS_ALLOWED_MODIFIERS
+        }
+    }
+
+    private fun StringBuilder.printClassTitleDeclarationModifierList(
+        modifierList: KtModifierList,
+        allowedModifiers: Set<KtModifierKeywordToken>,
+    ) {
+        var isFirst = true
+        var modifierCursor = modifierList.firstChild
+
+        while (modifierCursor != null) {
+            if (modifierCursor.tokenType in allowedModifiers) {
+                if (isFirst) {
+                    isFirst = false
+                } else {
+                    append(' ')
+                }
+
+                append(modifierCursor.text)
+            }
+
+            modifierCursor = modifierCursor.nextSibling
         }
     }
 
@@ -241,11 +267,17 @@ internal class PrepareGenerationSourceCodePipelineStep(
         private fun onPsiElementContentFilter(filter: PsiElementContentFilter) {
             when (filter) {
                 is PsiElementContentFilter.If -> onIfBranchFilter(filter)
+                is PsiElementContentFilter.When -> onWhenBranchFilter(filter)
             }
         }
 
         private fun onIfBranchFilter(filter: PsiElementContentFilter.If) {
-            requireNotNull(filter.expression).accept(IfBranchFilterVisitor(builder, filter, input))
+            filter.expression.accept(IfBranchFilterVisitor(builder, filter, input))
+            skipElement()
+        }
+
+        private fun onWhenBranchFilter(filter: PsiElementContentFilter.When) {
+            filter.expression.accept(WhenBranchFilterVisitor(builder, filter, input))
             skipElement()
         }
     }
@@ -326,6 +358,74 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
+    private class WhenBranchFilterVisitor(
+        private val builder: StringBuilder,
+        filter: PsiElementContentFilter.When,
+        private val input: FunctionGenerationContext,
+    ) : PrintLeafVisitor(builder) {
+
+        private val skipEntries: Set<KtWhenEntry> =
+            filter.expression.entries.filterNotTo(mutableSetOf(), filter.entries::contains)
+
+        private val remainsEntries: MutableSet<KtWhenEntry> = filter.entries.toMutableSet()
+
+        private val isFilterContainsElse: Boolean = filter.entries.contains(filter.expression.elseExpression?.parent)
+
+        override fun onVisitPrintableElement(element: PsiElement) {
+            when (element) {
+                in skipEntries -> onSkippedEntry(element as KtWhenEntry)
+                is KtWhenEntry -> onUsedWhenEntry(element)
+                is PsiWhiteSpace -> onWhiteSpace(element)
+            }
+        }
+
+        private fun onSkippedEntry(entry: KtWhenEntry) = builder.run {
+            skipElement()
+
+            if (isFilterContainsElse) {
+                appendLine()
+                append(entry.getPreviousWhiteSpaceIndent())
+                append(entry.conditions.joinToString(separator = ", ", transform = PsiElement::getText))
+                append(" -> ")
+                append(getSkipStub())
+            }
+        }
+
+        private fun onUsedWhenEntry(entry: KtWhenEntry) {
+            builder.appendLine()
+            builder.append(entry.getPreviousWhiteSpaceIndent())
+            entry.accept(PrintFilterableElementVisitor(builder, input))
+            skipElement()
+        }
+
+        private fun onWhiteSpace(whiteSpace: PsiWhiteSpace) {
+            if (whiteSpace.nextSibling is KtWhenEntry) {
+                skipElement()
+            }
+        }
+
+        override fun elementFinished(element: PsiElement?) {
+            super.elementFinished(element)
+
+            if (remainsEntries.remove(element) && remainsEntries.isEmpty()) {
+                if (!isFilterContainsElse) {
+                    printSkipElse(element)
+                }
+            }
+        }
+
+        private fun printSkipElse(lastElement: PsiElement?) = builder.run {
+            appendLine()
+            append(lastElement?.getPreviousWhiteSpaceIndent().orEmpty())
+            append("else -> ")
+            append(getSkipStub())
+        }
+
+        private fun getSkipStub(): String {
+            return "error(\"skip\")"
+        }
+    }
+
     private open class PrintLeafVisitor(
         private val builder: StringBuilder
     ) : PsiRecursiveElementWalkingVisitor() {
@@ -371,7 +471,28 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun PsiElement.getPreviousWhiteSpaceIndent(): String {
-        return (prevSibling as? PsiWhiteSpace)?.text?.substringAfterLast('\n').orEmpty()
+    private companion object {
+
+        @JvmField
+        val LOCAL_CLASS_ALLOWED_MODIFIERS = setOf(
+            KtTokens.PRIVATE_KEYWORD,
+            KtTokens.PROTECTED_KEYWORD,
+            KtTokens.ENUM_KEYWORD,
+            KtTokens.DATA_KEYWORD,
+            KtTokens.VALUE_KEYWORD,
+            KtTokens.SEALED_KEYWORD,
+        )
+
+        @JvmField
+        val TOP_LEVEL_CLASS_ALLOWED_MODIFIERS = setOf(
+            KtTokens.ENUM_KEYWORD,
+            KtTokens.DATA_KEYWORD,
+            KtTokens.VALUE_KEYWORD,
+            KtTokens.SEALED_KEYWORD,
+        )
+
+        private fun PsiElement.getPreviousWhiteSpaceIndent(): String {
+            return (prevSibling as? PsiWhiteSpace)?.text?.substringAfterLast('\n').orEmpty()
+        }
     }
 }

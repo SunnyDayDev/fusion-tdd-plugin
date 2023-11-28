@@ -16,6 +16,7 @@ import io.mockk.mockk
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtWhenEntry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -116,6 +117,8 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
         )
     }
 
+    // region Modifiers
+
     @Test
     fun `on enum class, keep 'enum' modifier`() {
         executePrepareGenerationSourceCodeTest(
@@ -182,6 +185,114 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             expectedOutput = "value class Value(val value: Int)",
         )
     }
+
+    @Test
+    fun `on sealed, keep 'sealed' modifier`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Sealed.kt",
+                    "internal sealed interface Sealed",
+                )
+            },
+            buildContext = simpleClassContextBuilder("Sealed"),
+            expectedOutput = "sealed interface Sealed",
+        )
+    }
+
+    @Test
+    fun `on private top level class, remove 'private' modifier`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "SomeClass.kt",
+                    "private class SomeClass",
+                )
+            },
+            buildContext = simpleClassContextBuilder("SomeClass"),
+            expectedOutput = "class SomeClass",
+        )
+    }
+
+    @Test
+    fun `on private local class, keep 'private' modifier`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Owner.kt",
+                    """
+                        class Owner {
+                
+                            private class Local
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Owner") {
+                setUsedReferences(getClass("Owner.Local"))
+            },
+            expectedOutput = """
+                class Owner {
+                
+                    private class Local
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on protected local class, keep 'protected' modifier`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Owner.kt",
+                    """
+                        class Owner {
+                
+                            protected class Local
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Owner") {
+                setUsedReferences(getClass("Owner.Local"))
+            },
+            expectedOutput = """
+                class Owner {
+                
+                    protected class Local
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on multi modifiers local class, keep all allowed modifiers`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Owner.kt",
+                    """
+                        class Owner {
+                
+                            private enum class Local
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Owner") {
+                setUsedReferences(getClass("Owner.Local"))
+            },
+            expectedOutput = """
+                class Owner {
+                
+                    private enum class Local
+                }
+            """.trimIndent(),
+        )
+    }
+
+    // endregion
 
     // endregion
 
@@ -476,6 +587,99 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
     // endregion
 
+    // region When branching
+
+    @Test
+    fun `on 'when' filter, keep only filtered branches`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "When.kt", """
+                    class When {
+                        fun check(case: Int) {
+                            when (case) {
+                                1, 2 -> doSome()
+                                3 -> doElse()
+                                else -> doElse()
+                            }
+                        }
+                        private fun doSome() = Unit
+                        private fun doElse() = Unit
+                    }
+                """.trimIndent()
+                )
+            },
+            buildContext = simpleClassContextBuilder("When", "check", "doSome") { whenClass ->
+                val whenExpression = whenClass.getFirstWhenExpression()
+                setBranchFilters(
+                    whenExpression to PsiElementContentFilter.When(
+                        whenExpression, listOf(whenExpression.entries[0])
+                    )
+                )
+            },
+            expectedOutput = """
+                class When {
+                
+                    fun check(case: Int) {
+                        when (case) {
+                            1, 2 -> doSome()
+                            else -> error("skip")
+                        }
+                    }
+                
+                    private fun doSome() = Unit
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on 'when' filter with else branch, mark other branches as skip`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "When.kt", """
+                    class When {
+                        fun check(case: Int) {
+                            when (case) {
+                                1, 2 -> doSome()
+                                3 -> doSome()
+                                else -> doElse()
+                            }
+                        }
+                        private fun doSome() = Unit
+                        private fun doElse() = Unit
+                    }
+                """.trimIndent()
+                )
+            },
+            buildContext = simpleClassContextBuilder("When", "check", "doElse") { whenClass ->
+                val whenExpression = whenClass.getFirstWhenExpression()
+                setBranchFilters(
+                    whenExpression to PsiElementContentFilter.When(
+                        whenExpression, listOf(whenExpression.elseExpression?.parent as KtWhenEntry)
+                    )
+                )
+            },
+            expectedOutput = """
+                class When {
+                
+                    fun check(case: Int) {
+                        when (case) {
+                            1, 2 -> error("skip")
+                            3 -> error("skip")
+                            else -> doElse()
+                        }
+                    }
+                
+                    private fun doElse() = Unit
+                }
+            """.trimIndent(),
+        )
+    }
+
+    // endregion
+
     // endregion
 
     // region Fixtures, Builders, Utils
@@ -565,7 +769,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
         val result = runReadAction { step.executeAndWait(functionContext) }
 
-        assertThat(result.getOrNull()?.rawText.orEmpty()).isEqualTo(expectedOutput)
+        assertThat(result.getOrThrow().rawText).isEqualTo(expectedOutput)
     }
 
     private interface FunctionContextBuilder : JavaCodeInsightTestFixture {
