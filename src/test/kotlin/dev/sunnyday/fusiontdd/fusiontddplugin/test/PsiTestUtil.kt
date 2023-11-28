@@ -81,3 +81,7 @@ fun KtClass.getEnumEntry(name: String): KtEnumEntry {
 fun PsiElement.getFirstIfExpression(): KtIfExpression {
     return requireNotNull(findDescendantOfType<KtIfExpression>())
 }
+
+fun PsiElement.getFirstWhenExpression(): KtWhenExpression {
+    return requireNotNull(findDescendantOfType<KtWhenExpression>())
+}

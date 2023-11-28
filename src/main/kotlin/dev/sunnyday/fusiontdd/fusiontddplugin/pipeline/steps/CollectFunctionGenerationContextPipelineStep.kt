@@ -105,8 +105,15 @@ internal class CollectFunctionGenerationContextPipelineStep(
             while (usagePathCursor != null && !usagePathCursor.isClassOrTopLevelFunction()) {
                 val parent = usagePathCursor.parent
 
+
+
                 when (parent) {
                     is KtIfExpression -> {
+                        branchPoints.getOrPut(parent, ::mutableSetOf)
+                            .add(usagePathCursor)
+                    }
+
+                    is KtWhenExpression -> {
                         branchPoints.getOrPut(parent, ::mutableSetOf)
                             .add(usagePathCursor)
                     }
@@ -204,14 +211,26 @@ internal class CollectFunctionGenerationContextPipelineStep(
                 )
 
                 when (element) {
-                    is KtIfExpression -> {
-                        if (usedBranches.size == 1) {
-                            branchFilters[element] = PsiElementContentFilter.If(
-                                expression = element,
-                                isThen = element.then == usedBranches.single().firstChild,
-                            )
-                        }
-                    }
+                    is KtIfExpression -> collectIfBranchFilter(element, usedBranches)
+                    is KtWhenExpression -> collectWhenBranchFilter(element, usedBranches)
+                }
+            }
+
+            private fun collectIfBranchFilter(ifExpression: KtIfExpression, usedBranches: Set<PsiElement>) {
+                if (usedBranches.size == 1) {
+                    branchFilters[ifExpression] = PsiElementContentFilter.If(
+                        expression = ifExpression,
+                        isThen = ifExpression.then == usedBranches.single().firstChild,
+                    )
+                }
+            }
+
+            private fun collectWhenBranchFilter(whenExpression: KtWhenExpression, usedBranches: Set<PsiElement>) {
+                if (usedBranches.size in 1 ..< whenExpression.entries.size) {
+                    branchFilters[whenExpression] = PsiElementContentFilter.When(
+                        expression = whenExpression,
+                        entries = whenExpression.entries.filter(usedBranches::contains),
+                    )
                 }
             }
 
@@ -227,10 +246,8 @@ internal class CollectFunctionGenerationContextPipelineStep(
             }
 
             private fun onClassReference(reference: KtClass) {
-                if (reference.isScannable()) {
-                    if (reference.isTopLevel()) {
-                        referencedClasses.add(reference)
-                    }
+                if (reference.isScannable() && reference.isTopLevel()) {
+                    referencedClasses.add(reference)
                 } else {
                     usedReferences.add(reference)
                 }
@@ -244,12 +261,7 @@ internal class CollectFunctionGenerationContextPipelineStep(
                     constructedClass !== targetClass
                 ) {
                     usedReferences.add(reference)
-
-                    if (constructedClass.isScannable() && constructedClass.isTopLevel()) {
-                        referencedClasses.add(constructedClass)
-                    } else {
-                        usedReferences.add(constructedClass)
-                    }
+                    onClassReference(constructedClass)
                 }
             }
 
