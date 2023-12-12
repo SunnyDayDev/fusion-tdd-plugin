@@ -8,15 +8,16 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.psi.util.PsiTreeUtil
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
+import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactoryService
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.getLeftOrNull
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.isRight
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.requireRight
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.GeneratingFunctionHighlightAnimatorProvider
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.andThen
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.retry
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.wrapWithProgress
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.*
+import org.jetbrains.kotlin.idea.base.util.letIf
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNamedFunction
 
@@ -78,18 +79,52 @@ class CodeGenerateAction : AnAction() {
     ) {
         logger.debug("Proceed '${templatePresentation.text}' for: ${targetFunction.name}")
 
-        val pipeline = project.service<PipelineStepsFactoryService>()
-
-        pipeline.collectTestsAndUsedReferencesForFun(targetFunction, targetClass)
-            .andThen(pipeline.prepareGenerationSourceCode())
-            .andThen(pipeline.confirmGenerationSource())
-            .andThen(
-                pipeline.generateCodeSuggestion()
-                    .andThen(pipeline.replaceFunctionBody(targetFunction))
-                    .retry(GENERATE_FUNCTION_RETRIES_COUNT)
-            )
+        generateTargetFunctionByTests(targetFunction, targetClass, project)
             .wrapWithProgress { highlightGeneratingFunctionWithAnimation(targetFunction, editor) }
             .execute()
+    }
+
+    // TODO: extract to separated class/usecase
+    // TODO: move args to Pipeline.Input
+    private fun generateTargetFunctionByTests(
+        targetFunction: KtNamedFunction,
+        targetClass: KtClass,
+        project: Project,
+    ): PipelineStep<Nothing?, *> {
+        val pipeline = project.service<PipelineStepsFactoryService>()
+
+        return with(pipeline) {
+            prepareSourceForGenerationPipeline(targetFunction, targetClass)
+                .andThen(generateTargetFunction(project, targetFunction))
+        }
+    }
+
+    private fun PipelineStepsFactoryService.prepareSourceForGenerationPipeline(
+        targetFunction: KtNamedFunction,
+        targetClass: KtClass,
+    ): PipelineStep<Nothing?, CodeBlock> {
+        return collectTestsAndUsedReferencesForFun(targetFunction, targetClass)
+            .andThen(prepareGenerationSourceCode())
+            .andThen(confirmGenerationSource())
+    }
+
+    private fun PipelineStepsFactoryService.generateTargetFunction(
+        project: Project,
+        targetFunction: KtNamedFunction,
+    ): PipelineStep<CodeBlock, KtNamedFunction> {
+        return generateCodeSuggestion()
+            .andThen(replaceFunctionBodyWithPossibleFix(project, targetFunction))
+            .retry(GENERATE_FUNCTION_RETRIES_COUNT)
+    }
+
+    private fun PipelineStepsFactoryService.replaceFunctionBodyWithPossibleFix(
+        project: Project,
+        targetFunction: KtNamedFunction,
+    ): PipelineStep<GenerateCodeBlockResult, KtNamedFunction> {
+        val settings = project.service<FusionTDDSettings>()
+
+        return replaceFunctionBody(targetFunction)
+            .letIf(settings.isFixApplyGenerationResultError) { it.retryWithFix(fixGenerationResult()) }
     }
 
     private fun highlightGeneratingFunctionWithAnimation(

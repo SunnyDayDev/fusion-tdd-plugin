@@ -151,6 +151,16 @@ internal class FusionTTDSettingsConfigurable(
                         )
                         .bindSelected(settings::isConfirmSourceBeforeGeneration)
                 }
+
+                row {
+                    checkBox("Handle apply generated suggestion error")
+                        .applyToComponent { name = settings::isFixApplyGenerationResultError.name }
+                        .comment(
+                            comment = "If enabled, the dialog with failed suggestion will be shown " +
+                                    "to allow fix/modify the suggestion and retry.",
+                        )
+                        .bindSelected(settings::isFixApplyGenerationResultError)
+                }
             }
         }
     }

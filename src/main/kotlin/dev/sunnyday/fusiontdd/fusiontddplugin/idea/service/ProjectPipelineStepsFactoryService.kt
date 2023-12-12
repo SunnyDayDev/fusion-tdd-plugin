@@ -7,6 +7,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionGenerationContext
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.service.PipelineStepsFactoryService
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.dialog.ModifySourceCodeDialog
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.*
 import org.jetbrains.kotlin.psi.KtClass
@@ -37,6 +38,7 @@ internal class ProjectPipelineStepsFactoryService(
     override fun confirmGenerationSource(): PipelineStep<CodeBlock, CodeBlock> {
         return ConfirmGenerationSourcePipelineStep(
             settings = project.service(),
+            dialogFactory = ::ModifySourceCodeDialog,
         )
     }
 
@@ -50,5 +52,9 @@ internal class ProjectPipelineStepsFactoryService(
 
     override fun replaceFunctionBody(function: KtNamedFunction): PipelineStep<GenerateCodeBlockResult, KtNamedFunction> {
         return ReplaceFunctionBodyPipelineStep(function)
+    }
+
+    override fun fixGenerationResult(): PipelineStep<GenerateCodeBlockResult, GenerateCodeBlockResult> {
+        return FixGenerationResultPipelineStep(::ModifySourceCodeDialog)
     }
 }

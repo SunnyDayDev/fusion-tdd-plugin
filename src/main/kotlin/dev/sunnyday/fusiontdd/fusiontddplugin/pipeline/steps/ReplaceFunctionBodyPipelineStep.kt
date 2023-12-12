@@ -6,7 +6,7 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.util.Computable
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
-import org.jetbrains.kotlin.idea.util.reformatted
+import org.jetbrains.kotlin.idea.base.util.reformatted
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPsiFactory
 
@@ -24,8 +24,9 @@ internal class ReplaceFunctionBodyPipelineStep(
                 Computable {
                     logger.debug("Pipeline: Replace function body of ${targetFunction.name}")
 
+                    val generatedBody = input.variants.firstOrNull()?.rawText.orEmpty()
                     KtPsiFactory(targetFunction.project, markGenerated = false)
-                        .createBlock(input.variants.firstOrNull()?.rawText.orEmpty())
+                        .createBlock(generatedBody)
                 }
             )
 

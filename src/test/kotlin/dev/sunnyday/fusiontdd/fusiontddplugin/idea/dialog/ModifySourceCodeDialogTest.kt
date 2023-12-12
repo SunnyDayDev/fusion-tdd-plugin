@@ -18,9 +18,11 @@ import io.mockk.spyk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import javax.swing.JComponent
+import javax.swing.JLabel
+import javax.swing.JTextArea
 import kotlin.properties.Delegates
 
-class ModifyGenerationSourceDialogTest : LightJavaCodeInsightFixtureTestCase5() {
+class ModifySourceCodeDialogTest : LightJavaCodeInsightFixtureTestCase5() {
 
     private val contentPaneSlot = CapturingSlot<JComponent>()
     private var originalPeerFactory: DialogWrapperPeerFactory by Delegates.notNull()
@@ -47,24 +49,33 @@ class ModifyGenerationSourceDialogTest : LightJavaCodeInsightFixtureTestCase5() 
 
     @Test
     fun `dialog has dimensions service key`() = runInEdtAndWait {
-        val dialog = ModifyGenerationSourceDialog()
+        val dialog = ModifySourceCodeDialog()
         assertThat(dialog.dimensionKey).isNotEmpty()
     }
 
     @Test
     fun `on set code block, fill code area`() = runInEdtAndWait {
-        val dialog = ModifyGenerationSourceDialog()
+        val dialog = ModifySourceCodeDialog()
         dialog.setCodeBlock(rawCode = "2 + 2")
 
-        val textArea = contentPaneSlot.captured.requireChildByName<JBTextArea>("codeArea")
+        val textArea = contentPaneSlot.captured.requireChildByName<JTextArea>("codeArea")
 
         assertThat(textArea.text).isEqualTo("2 + 2")
     }
 
+    @Test
+    fun `on set description, update description label`() = runInEdtAndWait {
+        val dialog = ModifySourceCodeDialog()
+        dialog.setDescription("Changed description")
+
+        val textArea = contentPaneSlot.captured.requireChildByName<JLabel>("descriptionLabel")
+
+        assertThat(textArea.text).isEqualTo("Changed description")
+    }
 
     @Test
     fun `on get code block, get it from code area`() = runInEdtAndWait {
-        val dialog = ModifyGenerationSourceDialog()
+        val dialog = ModifySourceCodeDialog()
         dialog.setCodeBlock(rawCode = "2 + 2")
 
         val textArea = contentPaneSlot.captured.requireChildByName<JBTextArea>("codeArea")

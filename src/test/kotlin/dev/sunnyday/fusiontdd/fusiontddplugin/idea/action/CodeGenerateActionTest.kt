@@ -63,6 +63,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             every { projectPackage } returns "project"
             every { authToken } returns "asgfasdk898suhdf"
             every { starcoderModel } returns "starcoder"
+            every { isFixApplyGenerationResultError } returns false
         }
 
         application.registerServiceInstance(
@@ -212,13 +213,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         val confirmedSourceForGeneration = mockk<CodeBlock>(relaxed = true)
         val generationResult = mockk<GenerateCodeBlockResult>()
 
-        val (
-            collectDependenciesPipelineStep,
-            prepareSourcePipelineStep,
-            confirmSourcePipelineStep,
-            generateFunctionPipelineStep,
-            replaceFunctionPipelineStep,
-        ) = configurePipelineMock(
+        val pipeline = configurePipelineMock(
             collectDependenciesResult = { Result.success(functionGenerationContext) },
             prepareSourceResult = { Result.success(sourceForGeneration) },
             confirmSourceResult = { Result.success(confirmedSourceForGeneration) },
@@ -238,60 +233,83 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             pipelineFactory.generateCodeSuggestion()
             pipelineFactory.replaceFunctionBody(refEq(targetFunction))
 
-            collectDependenciesPipelineStep.execute(outputObserver = any())
-            prepareSourcePipelineStep.execute(refEq(functionGenerationContext), any())
-            confirmSourcePipelineStep.execute(sourceForGeneration, any())
-            generateFunctionPipelineStep.execute(confirmedSourceForGeneration, any())
-            replaceFunctionPipelineStep.execute(refEq(generationResult), any())
+            pipeline.collectDependencies.execute(outputObserver = any())
+            pipeline.prepareSource.execute(refEq(functionGenerationContext), any())
+            pipeline.confirmSource.execute(sourceForGeneration, any())
+            pipeline.generateFunction.execute(confirmedSourceForGeneration, any())
+            pipeline.replaceFunction.execute(refEq(generationResult), any())
         }
     }
 
     @Test
     fun `on perform if generation result can't be applied, try to retry 3 times`() {
-        val (
-            _,
-            _,
-            nonRetryableConfirmSourceResultStep,
-            generateFunctionPipelineStep,
-            replaceFunctionPipelineStep,
-        ) = configurePipelineMock(
+        val pipeline = configurePipelineMock(
             replaceFunctionResult = { Result.failure(Error("Simulated error")) },
         )
 
         runReadAction { action.actionPerformed(actionEvent) }
 
-        verify(exactly = 1) {
-            nonRetryableConfirmSourceResultStep.execute(any(), any())
-        }
+        verify {
+            // Last non retryable call
+            pipeline.prepareSource.execute(any(), any())
 
-        verify(exactly = 4) {
-            generateFunctionPipelineStep.execute(any(), any())
-            replaceFunctionPipelineStep.execute(any(), any())
+            // First call
+            pipeline.generateFunction.execute(any(), any())
+            pipeline.replaceFunction.execute(any(), any())
+
+            // 3 times retry
+            repeat(3) {
+                pipeline.generateFunction.execute(any(), any())
+                pipeline.replaceFunction.execute(any(), any())
+            }
         }
+        confirmVerified(
+            pipeline.prepareSource,
+            pipeline.generateFunction,
+            pipeline.replaceFunction,
+        )
     }
 
     @Test
     fun `on perform if prepare source failed, don't retry`() {
-        val (
-            _,
-            _,
-            nonRetryableConfirmSourceResultStep,
-            generateFunctionPipelineStep,
-            replaceFunctionPipelineStep,
-        ) = configurePipelineMock(
+        val pipeline = configurePipelineMock(
             confirmSourceResult = { Result.failure(Error("Simulated error")) },
         )
 
         runReadAction { action.actionPerformed(actionEvent) }
 
         verify(exactly = 1) {
-            nonRetryableConfirmSourceResultStep.execute(any(), any())
+            pipeline.confirmSource.execute(any(), any())
         }
 
         verify(exactly = 0) {
-            generateFunctionPipelineStep.execute(any(), any())
-            replaceFunctionPipelineStep.execute(any(), any())
+            pipeline.generateFunction.execute(any(), any())
         }
+    }
+
+    @Test
+    fun `on perform if fix failed generation result enabled, retry replace with fixed input`() = runInEdtAndWait {
+        every { settings.isFixApplyGenerationResultError } returns true
+        val brokenGenerationResult = mockk<GenerateCodeBlockResult>()
+        val fixedGenerationResult = mockk<GenerateCodeBlockResult>()
+
+        val pipeline = configurePipelineMock(
+            generateFunctionResult = results(brokenGenerationResult),
+            replaceFunctionResult = results(
+                { Result.failure(Error("Simulated error")) },
+                { Result.success(mockk()) },
+            ),
+            fixGenerationResultResult = results(fixedGenerationResult),
+        )
+
+        action.actionPerformed(actionEvent)
+
+        verifyOrder {
+            pipeline.replaceFunction.execute(brokenGenerationResult, any())
+            pipeline.fixGenerationResult.execute(brokenGenerationResult, any())
+            pipeline.replaceFunction.execute(fixedGenerationResult, any())
+        }
+        confirmVerified(pipeline.replaceFunction, pipeline.fixGenerationResult)
     }
 
     @Test
@@ -327,6 +345,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         confirmSourceResult: (CodeBlock) -> Result<CodeBlock> = { Result.success(it) },
         generateFunctionResult: (CodeBlock) -> Result<GenerateCodeBlockResult> = { Result.success(mockk()) },
         replaceFunctionResult: (GenerateCodeBlockResult) -> Result<KtNamedFunction> = { Result.success(mockk()) },
+        fixGenerationResultResult: (GenerateCodeBlockResult) -> Result<GenerateCodeBlockResult> = { Result.success(mockk()) },
     ): PipelineMock {
         val collectDependencies = mockk<PipelineStep<Nothing?, FunctionGenerationContext>> {
             every { execute(null, any()) } answers {
@@ -337,6 +356,8 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         val confirmSource = mockPipelineStep<CodeBlock, CodeBlock>(confirmSourceResult)
         val generateFunction = mockPipelineStep<CodeBlock, GenerateCodeBlockResult>(generateFunctionResult)
         val replaceFunction = mockPipelineStep<GenerateCodeBlockResult, KtNamedFunction>(replaceFunctionResult)
+        val fixGenerationResult =
+            mockPipelineStep<GenerateCodeBlockResult, GenerateCodeBlockResult>(fixGenerationResultResult)
 
         pipelineFactory.apply {
             every { collectTestsAndUsedReferencesForFun(any(), any()) } returns collectDependencies
@@ -344,14 +365,16 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             every { confirmGenerationSource() } returns confirmSource
             every { generateCodeSuggestion() } returns generateFunction
             every { replaceFunctionBody(any()) } returns replaceFunction
+            every { fixGenerationResult() } returns fixGenerationResult
         }
 
         return PipelineMock(
-            collectDependenciesPipelineStep = collectDependencies,
-            prepareSourcePipelineStep = prepareSource,
+            collectDependencies = collectDependencies,
+            prepareSource = prepareSource,
             confirmSource = confirmSource,
-            generateFunctionPipelineStep = generateFunction,
-            replaceFunctionPipelineStep = replaceFunction,
+            generateFunction = generateFunction,
+            replaceFunction = replaceFunction,
+            fixGenerationResult = fixGenerationResult,
         )
     }
 
@@ -363,11 +386,34 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         }
     }
 
+    private fun <I, T> results(vararg items: T): (I) -> Result<T> {
+        val remainsResults = items.toMutableList()
+        return { _: I ->
+            if (remainsResults.isEmpty()) {
+                Result.failure(Error("No more results"))
+            } else {
+                Result.success(remainsResults.removeAt(0))
+            }
+        }
+    }
+
+    private fun <I, T> results(vararg items: (I) -> Result<T>): (I) -> Result<T> {
+        val remainsResults = items.toMutableList()
+        return { input ->
+            if (remainsResults.isEmpty()) {
+                Result.failure(Error("No more results"))
+            } else {
+                remainsResults.removeAt(0).invoke(input)
+            }
+        }
+    }
+
     private data class PipelineMock(
-        val collectDependenciesPipelineStep: PipelineStep<Nothing?, FunctionGenerationContext>,
-        val prepareSourcePipelineStep: PipelineStep<FunctionGenerationContext, CodeBlock>,
+        val collectDependencies: PipelineStep<Nothing?, FunctionGenerationContext>,
+        val prepareSource: PipelineStep<FunctionGenerationContext, CodeBlock>,
         val confirmSource: PipelineStep<CodeBlock, CodeBlock>,
-        val generateFunctionPipelineStep: PipelineStep<CodeBlock, GenerateCodeBlockResult>,
-        val replaceFunctionPipelineStep: PipelineStep<GenerateCodeBlockResult, KtNamedFunction>,
+        val generateFunction: PipelineStep<CodeBlock, GenerateCodeBlockResult>,
+        val replaceFunction: PipelineStep<GenerateCodeBlockResult, KtNamedFunction>,
+        val fixGenerationResult: PipelineStep<GenerateCodeBlockResult, GenerateCodeBlockResult>,
     )
 }
