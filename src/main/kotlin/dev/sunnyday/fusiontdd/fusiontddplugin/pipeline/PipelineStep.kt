@@ -45,6 +45,32 @@ internal fun <Input, Output> PipelineStep<Input, Output>.retry(times: Int): Pipe
     }
 }
 
+internal fun <Input, Output> PipelineStep<Input, Output>.retryWithFix(
+    fixStep: PipelineStep<Input, Input>,
+): PipelineStep<Input, Output> {
+    return PipelineStep { input, observer ->
+        executeRetryWithFix(input, observer, fixStep)
+    }
+}
+
+private fun <Input, Output> PipelineStep<Input, Output>.executeRetryWithFix(
+    input: Input,
+    observer: (Result<Output>) -> Unit,
+    fixStep: PipelineStep<Input, Input>,
+) {
+    execute(input) { result ->
+        if (result.isSuccess) {
+            observer.invoke(result)
+        } else {
+            fixStep.execute(input) { fixedInputResult ->
+                fixedInputResult
+                    .onSuccess { fixedInput -> executeRetryWithFix(fixedInput, observer, fixStep) }
+                    .onFailure { fixError -> observer(Result.failure(fixError)) }
+            }
+        }
+    }
+}
+
 internal fun <Input, Output, Progress> PipelineStep<Input, Output>.wrapWithProgress(
     onExecute: () -> Progress,
     onResult: (Progress) -> Unit,

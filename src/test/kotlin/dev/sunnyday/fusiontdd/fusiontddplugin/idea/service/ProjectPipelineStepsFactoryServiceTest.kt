@@ -59,4 +59,11 @@ class ProjectPipelineStepsFactoryServiceTest : LightJavaCodeInsightFixtureTestCa
 
         assertThat(actualStep).isInstanceOf(ReplaceFunctionBodyPipelineStep::class.java)
     }
+
+    @Test
+    fun `create step for fixGenerationResult`() {
+        val actualStep = provider.fixGenerationResult()
+
+        assertThat(actualStep).isInstanceOf(FixGenerationResultPipelineStep::class.java)
+    }
 }

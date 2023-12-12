@@ -8,18 +8,21 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.toJavaDuration
 
 internal object KtorClientFactory {
 
-    fun createClient(authTokenProvider: AuthTokenProvider? = null): HttpClient {
+    fun createClient(authTokenProvider: AuthTokenProvider): HttpClient {
         return HttpClient(OkHttp) {
             engine {
                 config {
                     followRedirects(false)
 
-                    if (authTokenProvider != null) {
-                        addInterceptor(BearerAuthInterceptor(authTokenProvider))
-                    }
+                    connectTimeout(1.minutes.toJavaDuration())
+                    readTimeout(1.minutes.toJavaDuration())
+
+                    addInterceptor(BearerAuthInterceptor(authTokenProvider))
                 }
             }
 

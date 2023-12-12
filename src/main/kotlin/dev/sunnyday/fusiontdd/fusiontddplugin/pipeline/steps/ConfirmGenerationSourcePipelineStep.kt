@@ -1,29 +1,28 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps
 
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
-import dev.sunnyday.fusiontdd.fusiontddplugin.idea.dialog.ModifyGenerationSourceDialog
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.dialog.ModifySourceCodeDialog
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
-import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.util.PipelineCancellationException
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.common.ModifySourceCodePipelineStep
 
 internal class ConfirmGenerationSourcePipelineStep(
     private val settings: FusionTDDSettings,
-) : PipelineStep<CodeBlock, CodeBlock> {
+    dialogFactory: () -> ModifySourceCodeDialog,
+) : ModifySourceCodePipelineStep<CodeBlock>(dialogFactory) {
+
+    override fun getDialogCodeBlock(input: CodeBlock): String {
+        return input.rawText
+    }
+
+    override fun getModifiedInput(rawInput: String): CodeBlock {
+        return CodeBlock(rawInput)
+    }
 
     override fun execute(input: CodeBlock, observer: (Result<CodeBlock>) -> Unit) {
         if (!settings.isConfirmSourceBeforeGeneration) {
             observer.invoke(Result.success(input))
         } else {
-            val confirmDialog = ModifyGenerationSourceDialog().apply {
-                setCodeBlock(input.rawText)
-            }
-
-            if (confirmDialog.showAndGet()) {
-                val confirmedCodeBlock = CodeBlock(confirmDialog.getCodeBlock())
-                observer.invoke(Result.success(confirmedCodeBlock))
-            } else {
-                observer.invoke(Result.failure(PipelineCancellationException()))
-            }
+            super.execute(input, observer)
         }
     }
 }

@@ -8,6 +8,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class PipelineStepKtTest {
 
+    // region retry
+
     @Test
     fun `on retry, if error received, retry n times`() {
         val counter = AtomicInteger()
@@ -33,4 +35,73 @@ class PipelineStepKtTest {
 
         assertThat(counter.get()).isEqualTo(1)
     }
+
+    // endregion
+
+    // region retryWithFix
+
+    @Test
+    fun `on fixWith, fix input and retry`() {
+        // arrange
+        val brokenInput = -1
+        val fixedInput = 777
+        val pipeLine = PipelineStep<Int, Int> { input, observer ->
+            if (input != fixedInput) {
+                observer.invoke(Result.failure(Error("input is broken")))
+            } else {
+                observer.invoke(Result.success(input))
+            }
+        }
+        val fixStep = PipelineStep<Int, Int> { _, observer ->
+            observer.invoke(Result.success(fixedInput))
+        }
+
+        // act
+        val outputResult = pipeLine.retryWithFix(fixStep).executeAndWait(brokenInput)
+
+        // assert
+        assertThat(outputResult.getOrNull()).isEqualTo(fixedInput)
+    }
+
+    @Test
+    fun `on fixWith, repeat fix until success`() {
+        // arrange
+        val brokenInput = 0
+        val fixedInput = 3
+        val pipeLine = PipelineStep<Int, Int> { input, observer ->
+            if (input != fixedInput) {
+                observer.invoke(Result.failure(Error("input is broken")))
+            } else {
+                observer.invoke(Result.success(input))
+            }
+        }
+        val fixStep = PipelineStep<Int, Int> { input, observer ->
+            observer.invoke(Result.success(input + 1))
+        }
+
+        // act
+        val outputResult = pipeLine.retryWithFix(fixStep).executeAndWait(brokenInput)
+
+        // assert
+        assertThat(outputResult.getOrNull()).isEqualTo(fixedInput)
+    }
+
+    @Test
+    fun `on fixWith error result, throw it to the pipeline`() {
+        // arrange
+        val pipeLine = PipelineStep<Int, Int> { _, observer ->
+            observer.invoke(Result.failure(Error("input failed")))
+        }
+        val fixStep = PipelineStep<Int, Int> { _, observer ->
+            observer.invoke(Result.failure(Error("fix failed")))
+        }
+
+        // act
+        val outputResult = pipeLine.retryWithFix(fixStep).executeAndWait(-1)
+
+        // assert
+        assertThat(outputResult.exceptionOrNull()?.message).isEqualTo("fix failed")
+    }
+
+    // endregion
 }

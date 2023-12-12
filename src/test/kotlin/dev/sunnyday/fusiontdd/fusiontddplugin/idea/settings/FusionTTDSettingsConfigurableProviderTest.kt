@@ -145,7 +145,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
     }
 
     @Test
-    fun `'generation source' option is present on settings`() {
+    fun `'show generation source' option is present on settings`() {
         every { settings.isConfirmSourceBeforeGeneration } returns true
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
@@ -157,5 +157,20 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         configurableSettings.apply()
 
         verify { settings.isConfirmSourceBeforeGeneration = false }
+    }
+
+    @Test
+    fun `'handle apply suggestion error' option is present on settings`() {
+        every { settings.isFixApplyGenerationResultError } returns true
+        val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
+        val checkBox = requireNotNull(configurableSettings.createComponent())
+            .requireChildByName<JCheckBox>(settings::isFixApplyGenerationResultError.name)
+
+        assertThat(checkBox.isSelected).isTrue()
+
+        checkBox.isSelected = false
+        configurableSettings.apply()
+
+        verify { settings.isFixApplyGenerationResultError = false }
     }
 }
