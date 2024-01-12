@@ -13,6 +13,7 @@ import com.intellij.usageView.UsageInfo
 import com.intellij.util.CommonProcessors
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionGenerationContext
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.PsiElementContentFilter
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.ExpressionResultInstanceClassResolver
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.hasOverrideModifier
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.resolveClass
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
@@ -61,6 +62,10 @@ private class CollectFunctionGenerationContextPipelineTask(
     private val usedReferences = mutableSetOf<PsiElement>(targetFunction)
     private val branchFilters = mutableMapOf<PsiElement, PsiElementContentFilter>()
 
+    private val superClassesCache = mutableMapOf<KtClass, Set<KtClass>>()
+
+    private val receiverInstanceClassResolver = ExpressionResultInstanceClassResolver()
+
     fun execute(): FunctionGenerationContext {
         ProgressManager.getInstance().runProcess(
             /* process = */ Computable(::collectTestsWithBranchPointMarking),
@@ -82,16 +87,19 @@ private class CollectFunctionGenerationContextPipelineTask(
     }
 
     private fun collectTestsWithBranchPointMarking() {
-        val queue = ArrayDeque(listOf(targetFunction))
+        val queue = ArrayDeque<Pair<KtNamedFunction, KtClass?>>()
         val visited = mutableSetOf(targetFunction)
 
         getFunctionWithOverrides(targetFunction).let { functionWithOverrides ->
-            queue.addAll(functionWithOverrides)
+            functionWithOverrides.forEach { function ->
+                queue.add(function to targetClass)
+            }
             visited.addAll(functionWithOverrides)
         }
 
         while (queue.isNotEmpty()) {
-            val usages = findUsages(queue.removeFirst())
+            val (function, functionClass) = queue.removeFirst()
+            val usages = findUsages(function, functionClass)
             proceedUsages(usages, queue, visited)
         }
 
@@ -109,11 +117,7 @@ private class CollectFunctionGenerationContextPipelineTask(
             val superClasses = getSuperClasses(klass)
             superClasses.forEach { superClass ->
                 superClass.declarations.forEach { declaration ->
-                    if (
-                        declaration is KtNamedFunction &&
-                        declaration.name == function.name &&
-                        declaration.valueParameters == function.valueParameters
-                    ) {
+                    if (declaration is KtNamedFunction && isEqualSignature(declaration, function)) {
                         functionWithOverrides.add(declaration)
                     }
                 }
@@ -125,21 +129,38 @@ private class CollectFunctionGenerationContextPipelineTask(
         }
     }
 
-    private fun getSuperClasses(klass: KtClass): List<KtClass> = buildList {
-        val queue = ArrayDeque(listOf(klass))
+    private fun isEqualSignature(function1: KtNamedFunction, function2: KtNamedFunction): Boolean {
+        return function1.name == function2.name &&
+                function1.valueParameters == function2.valueParameters
+    }
 
-        while (queue.isNotEmpty()) {
-            val currentClass = queue.removeFirst()
-            currentClass.superTypeListEntries.forEach { superTypeEntry ->
-                superTypeEntry.resolveClass()?.let { superClass ->
-                    add(superClass)
-                    queue.add(superClass)
+    private fun getSuperClasses(klass: KtClass): Set<KtClass> {
+        return superClassesCache.getOrPut(klass) {
+            buildSet {
+                val queue = ArrayDeque(listOf(klass))
+
+                while (queue.isNotEmpty()) {
+                    val currentClass = queue.removeFirst()
+                    currentClass.superTypeListEntries.forEach { superTypeEntry ->
+                        superTypeEntry.resolveClass()?.let { superClass ->
+                            add(superClass)
+                            queue.add(superClass)
+                        }
+                    }
                 }
             }
         }
     }
 
-    private fun findUsages(function: KtNamedFunction): Collection<PsiReference> {
+    private fun findUsages(function: KtNamedFunction, functionClass: KtClass?): List<PsiReference> {
+        return findAnyUsages(function).mapNotNull { usageInfo ->
+            usageInfo.reference.takeIf {
+                isPossibleUsage(usageInfo, functionClass)
+            }
+        }
+    }
+
+    private fun findAnyUsages(function: KtNamedFunction): Collection<UsageInfo> {
         val collectProcessor = CommonProcessors.CollectProcessor<UsageInfo>()
 
         KotlinFindUsagesHandlerFactory(function.project)
@@ -153,12 +174,30 @@ private class CollectFunctionGenerationContextPipelineTask(
                 },
             )
 
-        return collectProcessor.results.mapNotNull { it.reference }
+        return collectProcessor.results
+    }
+
+    private fun isPossibleUsage(usageInfo: UsageInfo, functionClass: KtClass?): Boolean {
+        if (functionClass == null) return true
+
+        val receiverClass = getUsageReceiverClass(usageInfo)
+        return receiverClass == null ||
+                receiverClass === functionClass ||
+                getSuperClasses(receiverClass).contains(functionClass)
+    }
+
+    // TODO: getUsageReceiverClass, other usage cases (not only KtDotQualifiedExpression)
+    private fun getUsageReceiverClass(usageInfo: UsageInfo): KtClass? {
+        val usageElementContext = usageInfo.element?.context
+        return when (val usageContext = usageElementContext?.context) {
+            is KtDotQualifiedExpression -> receiverInstanceClassResolver.resolve(usageContext.receiverExpression)
+            else -> null
+        }
     }
 
     private fun proceedUsages(
         usages: Collection<PsiReference>,
-        queue: Deque<KtNamedFunction>,
+        queue: Deque<Pair<KtNamedFunction, KtClass?>>,
         visited: MutableSet<KtNamedFunction>,
     ) {
         usages.forEach forEachUsage@{ usage ->
@@ -167,7 +206,7 @@ private class CollectFunctionGenerationContextPipelineTask(
 
             getFunctionWithOverrides(usageOwnerFunction).forEach { function ->
                 if (visited.add(function)) {
-                    queue.addFirst(function)
+                    queue.addFirst(function to function.containingClass())
 
                     if (hasTestAnnotation(function)) {
                         function.containingClass()?.let { testClass ->
