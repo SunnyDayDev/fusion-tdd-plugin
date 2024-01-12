@@ -2,6 +2,8 @@ package dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps
 
 import com.google.common.truth.Truth.assertThat
 import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.testFramework.fixtures.JavaCodeInsightTestFixture
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase5
 import com.intellij.testFramework.runInEdtAndWait
@@ -13,8 +15,11 @@ import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.File
 
 class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFixtureTestCase5() {
+
+    // region Definition + Setup
 
     private val settings = mockk<FusionTDDSettings>()
 
@@ -27,6 +32,10 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     }
 
+    // endregion
+
+    // region Unspecified / Other
+
     @Test
     fun `collect dependencies of call_scenario`() = executeCollectContextTest(
         prepareProject = {
@@ -36,13 +45,7 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
             copyFileToProject("collect/call_scenario/UnusedClass.kt")
             copyFileToProject("collect/call_scenario/UsedClass.kt")
         },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.TargetClass.targetFunction"),
-                targetClass = getClass("project.TargetClass"),
-                settings = settings,
-            )
-        },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.targetFunction") },
         assertStepResult = { context ->
             assertThat(context).isEqualTo(
                 FunctionGenerationContext(
@@ -85,13 +88,7 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
             copyFileToProject("collect/local_class/TargetClass.kt")
             copyFileToProject("collect/local_class/TargetClassTest.kt")
         },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.TargetClass.targetFun"),
-                targetClass = getClass("project.TargetClass"),
-                settings = settings,
-            )
-        },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.targetFun") },
         assertStepResult = { context ->
             assertThat(context.usedClasses)
                 .doesNotContain(getClass("project.Owner.Local"))
@@ -111,13 +108,7 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
             copyFileToProject("collect/lib_class/TargetClass.kt")
             copyFileToProject("collect/lib_class/TargetClassTest.kt")
         },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.TargetClass.targetFun"),
-                targetClass = getClass("project.TargetClass"),
-                settings = settings,
-            )
-        },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.targetFun") },
         assertStepResult = { context ->
             val externalLibClass = getClass("lib.LibClass")
 
@@ -137,13 +128,7 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
             copyFileToProject("collect/lib_class/TargetClassTest.kt")
             copyFileToProject("collect/lib_class/Test.kt")
         },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = fixture.getClassFunction("project.TargetClass.targetFun"),
-                targetClass = fixture.getClass("project.TargetClass"),
-                settings = settings,
-            )
-        },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.targetFun") },
         assertStepResult = { context ->
             val testAnnotationClass = getClass("org.junit.jupiter.api.Test")
 
@@ -155,19 +140,14 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     )
 
+    // endregion
+
+    // region chained calls
+
     @Test
     fun `on chained target fun, collect calls chain`() = executeCollectContextTest(
-        prepareProject = {
-            copyFileToProject("collect/chain/simple/Target.kt")
-            copyFileToProject("collect/chain/simple/TargetTest.kt")
-        },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.Target.chainedFun"),
-                targetClass = getClass("project.Target"),
-                settings = settings,
-            )
-        },
+        prepareProject = { copyDirToProject("collect/chain/simple") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.chainedFun") },
         assertStepResult = { context ->
             assertThat(context.usedReferences)
                 .containsAtLeast(
@@ -180,36 +160,24 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     @Test
     fun `on chained target fun, don't collect funs that called from target fun`() = executeCollectContextTest(
-        prepareProject = {
-            copyFileToProject("collect/chain/simple/Target.kt")
-            copyFileToProject("collect/chain/simple/TargetTest.kt")
-        },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.Target.callerFun"),
-                targetClass = getClass("project.Target"),
-                settings = settings,
-            )
-        },
+        prepareProject = { copyDirToProject("collect/chain/simple") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.callerFun") },
         assertStepResult = { context ->
             assertThat(context.usedReferences)
                 .doesNotContain(getClassFunction("project.Target.chainedFun"))
         }
     )
 
+    // endregion
+
+    // region Branching
+
+    // region 'if' branching
+
     @Test
     fun `on 'if', collect branch filter`() = executeCollectContextTest(
-        prepareProject = {
-            copyFileToProject("collect/chain/if/Target.kt")
-            copyFileToProject("collect/chain/if/TargetTest.kt")
-        },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.Target.doElse2"),
-                targetClass = getClass("project.Target"),
-                settings = settings,
-            )
-        },
+        prepareProject = { copyDirToProject("collect/chain/if") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.doElse2") },
         assertStepResult = { context ->
             val firstIf = getClassFunction("project.Target.execute").getFirstIfExpression()
             val secondIf = getClassFunction("project.Target.doThen").getFirstIfExpression()
@@ -231,35 +199,21 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     @Test
     fun `on 'if' with both branches used, don't collect branch filter`() = executeCollectContextTest(
-        prepareProject = {
-            copyFileToProject("collect/chain/if/Target.kt")
-            copyFileToProject("collect/chain/if/TargetTest.kt")
-        },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.Target.doBoth"),
-                targetClass = getClass("project.Target"),
-                settings = settings,
-            )
-        },
+        prepareProject = { copyDirToProject("collect/chain/if") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.doBoth") },
         assertStepResult = { context ->
             assertThat(context.branchFilters).isEmpty()
         }
     )
 
+    // endregion
+
+    // region 'when' branching
+
     @Test
     fun `on 'when' with entry branch, collect branch filter`() = executeCollectContextTest(
-        prepareProject = {
-            copyFileToProject("collect/chain/when/When.kt")
-            copyFileToProject("collect/chain/when/WhenTest.kt")
-        },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.When.doSome"),
-                targetClass = getClass("project.When"),
-                settings = settings,
-            )
-        },
+        prepareProject = { copyDirToProject("collect/chain/when") },
+        createStep = { createPipelineStep(targetFunction = "project.When.doSome") },
         assertStepResult = { context ->
             val whenExpression = getClass("project.When").getFirstWhenExpression()
             assertThat(context.branchFilters).containsExactly(
@@ -279,17 +233,8 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     @Test
     fun `on 'when' with else branch, collect branch filter`() = executeCollectContextTest(
-        prepareProject = {
-            copyFileToProject("collect/chain/when/When.kt")
-            copyFileToProject("collect/chain/when/WhenTest.kt")
-        },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.When.doElse"),
-                targetClass = getClass("project.When"),
-                settings = settings,
-            )
-        },
+        prepareProject = { copyDirToProject("collect/chain/when") },
+        createStep = { createPipelineStep(targetFunction = "project.When.doElse") },
         assertStepResult = { context ->
             val whenExpression = getClass("project.When").getFirstWhenExpression()
             assertThat(context.branchFilters).containsExactly(
@@ -309,29 +254,76 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     @Test
     fun `on 'when' with all branches, don't collect branch filter`() = executeCollectContextTest(
-        prepareProject = {
-            copyFileToProject("collect/chain/when/When.kt")
-            copyFileToProject("collect/chain/when/WhenTest.kt")
-        },
-        createStep = {
-            CollectFunctionGenerationContextPipelineStep(
-                targetFunction = getClassFunction("project.When.doAll"),
-                targetClass = getClass("project.When"),
-                settings = settings,
-            )
-        },
+        prepareProject = { copyDirToProject("collect/chain/when") },
+        createStep = { createPipelineStep(targetFunction = "project.When.doAll") },
         assertStepResult = { context ->
             assertThat(context.branchFilters).isEmpty()
 
-            assertThat(context.usedReferences).apply {
-                containsAtLeast(
-                    getClassFunction("project.When.doSome"),
-                    getClassFunction("project.When.doAll"),
-                    getClassFunction("project.When.doElse"),
-                )
-            }
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassFunction("project.When.doSome"),
+                getClassFunction("project.When.doAll"),
+                getClassFunction("project.When.doElse"),
+            )
         }
     )
+
+    // endregion
+
+    // endregion
+
+    // region Inheritance
+
+    @Test
+    fun `on inherit function, collect parent tests`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/inheritance/common") },
+        createStep = { createPipelineStep(targetFunction = "project.Child.callParent") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassFunction("project.InheritanceTest.test child_callParent()"),
+                getClassFunction("project.InheritanceTest.test parentProperty_callParent()"),
+                getClassFunction("project.InheritanceTest.test parent_callParent()"),
+            )
+        }
+    )
+
+    @Test
+    fun `on implement function, collect interface tests`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/inheritance/common") },
+        createStep = { createPipelineStep(targetFunction = "project.Child.callInterface") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassFunction("project.InheritanceTest.test child_callInterface()"),
+                getClassFunction("project.InheritanceTest.test externalInterfaceProperty_callInterface()"),
+                getClassFunction("project.InheritanceTest.test externalInterface_callInterface()"),
+            )
+        }
+    )
+
+    @Test
+    fun `on inherit function, don't collect unnecessary super type tests`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/inheritance/common") },
+        createStep = { createPipelineStep(targetFunction = "project.Child.callParent") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).doesNotContain(
+                getClassFunction("project.InheritanceTest.test other")
+            )
+        }
+    )
+
+    @Test
+    fun `on implement function, don't collect unnecessary interface tests`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/inheritance/common") },
+        createStep = { createPipelineStep(targetFunction = "project.Child.callInterface") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).doesNotContain(
+                getClassFunction("project.InheritanceTest.test other")
+            )
+        }
+    )
+
+    // endregion
+
+    // region Utils + Fixtures
 
     private fun executeCollectContextTest(
         prepareProject: JavaCodeInsightTestFixture.() -> Unit,
@@ -345,4 +337,27 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         assertThat(dependencies).isNotNull()
         runReadAction { fixture.assertStepResult(dependencies!!) }
     }
+
+    private fun JavaCodeInsightTestFixture.createPipelineStep(
+        targetFunction: String,
+    ): CollectFunctionGenerationContextPipelineStep {
+        return CollectFunctionGenerationContextPipelineStep(
+            targetFunction = getClassFunction(targetFunction),
+            targetClass = getClass(targetFunction.substringBeforeLast('.')),
+            settings = settings,
+        )
+    }
+
+    private fun CodeInsightTestFixture.copyDirToProject(path: String) {
+        val baseDir = File(testDataPath)
+        val sourceFile = File(testDataPath, FileUtil.toSystemDependentName(path))
+        sourceFile.walkBottomUp()
+            .filter(File::isFile)
+            .forEach { file ->
+                val filePath = file.toRelativeString(baseDir)
+                copyFileToProject(filePath)
+            }
+    }
+
+    // endregion
 }
