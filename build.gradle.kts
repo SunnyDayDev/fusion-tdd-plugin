@@ -50,10 +50,6 @@ tasks {
     test {
         useJUnitPlatform()
     }
-
-    get("classpathIndexCleanup").apply {
-        dependsOn(get("compileTestKotlin"))
-    }
 }
 
 dependencies {
@@ -70,6 +66,7 @@ dependencies {
 
     implementation("org.slf4j:slf4j-api:2.0.9")
 
+    testImplementation("org.jetbrains.kotlin:kotlin-test:1.9.22")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("com.google.truth:truth:1.1.5")

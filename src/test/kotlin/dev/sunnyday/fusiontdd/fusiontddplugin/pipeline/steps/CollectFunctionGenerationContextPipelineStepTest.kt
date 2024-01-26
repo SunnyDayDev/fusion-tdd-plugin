@@ -323,6 +323,74 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     // endregion
 
+    // region Filter inaccessible test
+
+    @Test
+    fun `on condition case at 'when' branch with all 'is' conditions, skip tests that sends inaccessible args`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onEventOne") },
+            assertStepResult = { context ->
+                assertThat(context.tests.values.flatten()).contains(
+                    getClassFunction("project.FilterTest.test onEventOne"),
+                )
+
+                assertThat(context.tests.values.flatten()).containsNoneOf(
+                    getClassFunction("project.FilterTest.test onEventTwo"),
+                    getClassFunction("project.FilterTest.test onEventThree"),
+                    getClassFunction("project.FilterTest.test onEventFour"),
+                    getClassFunction("project.FilterTest.test Ignored"),
+                )
+            }
+        )
+
+    @Test
+    fun `on else case at 'when' branch with all 'is', skip tests that sends inaccessible args`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onElse") },
+            assertStepResult = { context ->
+                assertThat(context.usedReferences).containsAtLeast(
+                    getClassFunction("project.FilterTest.test onEventThree"),
+                    getClassFunction("project.FilterTest.test onEventFour"),
+                )
+
+                assertThat(context.usedReferences).containsNoneOf(
+                    getClassFunction("project.FilterTest.test onEventOne"),
+                    getClassFunction("project.FilterTest.test onEventTwo"),
+                    getClassFunction("project.FilterTest.test Ignored"),
+                )
+            }
+        )
+
+    @Test
+    fun `on 'is' case at 'when' with not all 'is' conditions, don't use requirements (pass all tests)`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onValueEventOne") },
+            assertStepResult = { context ->
+                assertThat(context.usedReferences).containsAtLeast(
+                    getClassFunction("project.FilterTest.test onValueEventOne"),
+                    getClassFunction("project.FilterTest.test onValueValue"),
+                )
+            }
+        )
+
+    @Test
+    fun `on 'is' case at 'when' with range conditions, don't use requirements (pass all tests)`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onRangeConditionEventOne") },
+            assertStepResult = { context ->
+                assertThat(context.usedReferences).containsAtLeast(
+                    getClassFunction("project.FilterTest.test onRangeConditionEventOne"),
+                    getClassFunction("project.FilterTest.test onRangeConditionValue"),
+                )
+            }
+        )
+
+    // region
+
     // region Utils + Fixtures
 
     private fun executeCollectContextTest(

@@ -9,13 +9,12 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiRecursiveElementWalkingVisitor
 import com.intellij.psi.PsiReference
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.parentOfType
 import com.intellij.usageView.UsageInfo
 import com.intellij.util.CommonProcessors
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.FunctionGenerationContext
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.PsiElementContentFilter
-import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.ExpressionResultInstanceClassResolver
-import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.hasOverrideModifier
-import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.resolveClass
+import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.*
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
@@ -24,6 +23,7 @@ import org.jetbrains.kotlin.idea.base.searching.usages.KotlinFunctionFindUsagesO
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClass
+import org.jetbrains.kotlin.psi.psiUtil.parameterIndex
 import java.util.*
 
 internal class CollectFunctionGenerationContextPipelineStep(
@@ -62,7 +62,14 @@ private class CollectFunctionGenerationContextPipelineTask(
     private val usedReferences = mutableSetOf<PsiElement>(targetFunction)
     private val branchFilters = mutableMapOf<PsiElement, PsiElementContentFilter>()
 
-    private val superClassesCache = mutableMapOf<KtClass, Set<KtClass>>()
+    private val referencedClassesCollector = mutableSetOf<KtClass>()
+    private val usedReferencesCollector = mutableSetOf<PsiElement>()
+    private val branchFiltersCollector = mutableMapOf<PsiElement, PsiElementContentFilter>()
+
+    private val functionUsageRequirements = mutableMapOf<KtNamedFunction, FunctionRequirement>()
+    private val usageToFunction = mutableMapOf<PsiElement, KtNamedFunction>()
+
+    private val superClassesCache = mutableMapOf<KtClassOrObject, Set<KtClass>>()
 
     private val receiverInstanceClassResolver = ExpressionResultInstanceClassResolver()
 
@@ -100,6 +107,7 @@ private class CollectFunctionGenerationContextPipelineTask(
         while (queue.isNotEmpty()) {
             val (function, functionClass) = queue.removeFirst()
             val usages = findUsages(function, functionClass)
+            usages.forEach { usage -> usageToFunction[usage.element] = function }
             proceedUsages(usages, queue, visited)
         }
 
@@ -134,7 +142,7 @@ private class CollectFunctionGenerationContextPipelineTask(
                 function1.valueParameters == function2.valueParameters
     }
 
-    private fun getSuperClasses(klass: KtClass): Set<KtClass> {
+    private fun getSuperClasses(klass: KtClassOrObject): Set<KtClass> {
         return superClassesCache.getOrPut(klass) {
             buildSet {
                 val queue = ArrayDeque(listOf(klass))
@@ -187,10 +195,15 @@ private class CollectFunctionGenerationContextPipelineTask(
     }
 
     // TODO: getUsageReceiverClass, other usage cases (not only KtDotQualifiedExpression)
-    private fun getUsageReceiverClass(usageInfo: UsageInfo): KtClass? {
+    private fun getUsageReceiverClass(usageInfo: UsageInfo): KtClassOrObject? {
         val usageElementContext = usageInfo.element?.context
+
         return when (val usageContext = usageElementContext?.context) {
-            is KtDotQualifiedExpression -> receiverInstanceClassResolver.resolve(usageContext.receiverExpression)
+            is KtDotQualifiedExpression -> {
+                val usageFunctionScope = usageInfo.element?.parentOfType<KtNamedFunction>()
+                receiverInstanceClassResolver.resolveClass(usageContext.receiverExpression, usageFunctionScope)
+            }
+
             else -> null
         }
     }
@@ -210,7 +223,9 @@ private class CollectFunctionGenerationContextPipelineTask(
 
                     if (hasTestAnnotation(function)) {
                         function.containingClass()?.let { testClass ->
-                            tests.getOrPut(testClass, ::mutableListOf).add(function)
+                            if (checkIsTestFitCallChainRequirements(function)) {
+                                tests.getOrPut(testClass, ::mutableListOf).add(function)
+                            }
                         }
                     }
                 }
@@ -225,15 +240,8 @@ private class CollectFunctionGenerationContextPipelineTask(
             val parent = usagePathCursor.parent
 
             when (parent) {
-                is KtIfExpression -> {
-                    branchPoints.getOrPut(parent, ::mutableSetOf)
-                        .add(usagePathCursor)
-                }
-
-                is KtWhenExpression -> {
-                    branchPoints.getOrPut(parent, ::mutableSetOf)
-                        .add(usagePathCursor)
-                }
+                is KtIfExpression -> onWalkUpToCallerFunctionMeetIfExpression(parent, usagePathCursor)
+                is KtWhenExpression -> onWalkUpToCallerFunctionMeetWhenExpression(parent, usagePathCursor)
             }
 
             usagePathCursor = parent
@@ -242,21 +250,283 @@ private class CollectFunctionGenerationContextPipelineTask(
         return usagePathCursor as? KtNamedFunction
     }
 
+    private fun onWalkUpToCallerFunctionMeetIfExpression(ifExpression: KtIfExpression, branch: PsiElement) {
+        branchPoints.getOrPut(ifExpression, ::mutableSetOf)
+            .add(branch)
+    }
+
+    private fun onWalkUpToCallerFunctionMeetWhenExpression(whenExpression: KtWhenExpression, branch: PsiElement) {
+        val whenEntry = branch as KtWhenEntry
+
+        addRequirementIfHas(whenExpression, whenEntry)
+
+        branchPoints.getOrPut(whenExpression, ::mutableSetOf)
+            .add(whenEntry)
+    }
+
+    private fun addRequirementIfHas(whenExpression: KtWhenExpression, whenEntry: KtWhenEntry) {
+        val whenFunctionScope = whenExpression.parentOfType<KtNamedFunction>() ?: return
+        val usedInWhenParameter = receiverInstanceClassResolver.resolveExpression(
+            expression = whenExpression.subjectExpression,
+            scopeExpression = whenFunctionScope,
+        )
+
+        if (usedInWhenParameter is KtParameter && usedInWhenParameter.ownerFunction === whenFunctionScope) {
+            val parameterRequirement = if (whenEntry.elseKeyword != null) {
+                collectWhenElseCaseRequiredClassOrObjectsWithNegotiation(whenExpression)
+            } else {
+                collectWhenCaseEntryRequiredClassOrObjectsWithNegotiation(whenEntry)
+            }
+
+            if (parameterRequirement == null) {
+                return
+            }
+
+            val functionRequirement = functionUsageRequirements.getOrPut(whenFunctionScope) {
+                FunctionRequirement()
+            }
+
+            functionRequirement.addParameterRequirement(usedInWhenParameter, parameterRequirement)
+        }
+    }
+
+    private fun collectWhenElseCaseRequiredClassOrObjectsWithNegotiation(
+        whenExpression: KtWhenExpression,
+    ): ParameterRequirement? {
+        if (!isAllEntriesHasRequirements(whenExpression)) {
+            return null
+        }
+
+        val negatedTypeRequirements = mutableListOf<TypeRequirement>()
+        val nonNegatedTypeRequirements = mutableListOf<TypeRequirement>()
+
+        whenExpression.entries.forEach { whenEntry ->
+            val positiveRequirements = collectWhenCaseEntryRequiredClassOrObjectsWithNegotiation(whenEntry)
+                ?.requirements
+                ?: return null
+
+            positiveRequirements.map { (requiredClassOrObject, isNegated) ->
+                val requirement = TypeRequirement(requiredClassOrObject, !isNegated)
+                if (requirement.isNegated) {
+                    negatedTypeRequirements.add(requirement)
+                } else {
+                    nonNegatedTypeRequirements.add(requirement)
+                }
+            }
+        }
+
+        return ParameterRequirement.Composite(
+            buildList {
+                if (negatedTypeRequirements.isNotEmpty()) {
+                    add(ParameterRequirement.All(negatedTypeRequirements))
+                }
+                if (nonNegatedTypeRequirements.isNotEmpty()) {
+                    add(ParameterRequirement.AnyOf(nonNegatedTypeRequirements))
+                }
+            }
+        )
+    }
+
+    private fun isAllEntriesHasRequirements(whenExpression: KtWhenExpression): Boolean {
+        return whenExpression.entries.all { whenEntry ->
+            whenEntry.conditions.all { condition ->
+                condition is KtWhenConditionIsPattern || condition is KtWhenConditionWithExpression
+            }
+        }
+    }
+
+    private fun collectWhenCaseEntryRequiredClassOrObjectsWithNegotiation(
+        whenEntry: KtWhenEntry
+    ): ParameterRequirement.AnyOf? {
+        val typeRequirements = whenEntry.conditions.map { condition ->
+            val typeRequirement = when (condition) {
+                is KtWhenConditionIsPattern -> getKtWhenConditionIsPatternTypeRequirement(condition)
+                is KtWhenConditionWithExpression -> getKtWhenConditionWithExpressionTypeRequirement(condition)
+                else -> null
+            }
+
+            // Only if all conditions can be transformed to requirements use them
+            typeRequirement ?: return null
+        }
+
+        return ParameterRequirement.AnyOf(typeRequirements)
+    }
+
+    private fun getKtWhenConditionIsPatternTypeRequirement(condition: KtWhenConditionIsPattern): TypeRequirement? {
+        return condition.typeReference?.resolve()?.let { classOrObject ->
+            TypeRequirement(classOrObject, condition.isNegated)
+        }
+    }
+
+    private fun getKtWhenConditionWithExpressionTypeRequirement(
+        condition: KtWhenConditionWithExpression
+    ): TypeRequirement? {
+        var expression = condition.expression
+        while (expression is KtDotQualifiedExpression) {
+            expression = expression.selectorExpression
+        }
+
+        return (expression?.mainReference?.resolve() as? KtClassOrObject)
+            ?.let { TypeRequirement(it, false) }
+    }
+
+    private fun checkIsTestFitCallChainRequirements(
+        function: KtNamedFunction,
+        resolvedParameters: Map<KtParameter, KtClassOrObject?> = emptyMap()
+    ): Boolean {
+        if (!checkPassRequirements(function, resolvedParameters)) {
+            return false
+        }
+
+        val functionBody = function.bodyExpression
+            ?: return true
+
+        return functionBody.acceptAll { element ->
+            val callExpression = element as? KtCallExpression
+                ?: return@acceptAll true
+
+            val calledFunction = (callExpression.calleeExpression as? KtNameReferenceExpression)
+                ?.mainReference?.resolve() as? KtNamedFunction
+                ?: return@acceptAll true
+
+            val callResolvedParameters = resolveFunctionCallParameters(
+                callExpression = callExpression,
+                function = calledFunction,
+                resolvedParameters = resolvedParameters,
+            )
+
+            checkIsTestFitCallChainRequirements(
+                function = calledFunction,
+                resolvedParameters = callResolvedParameters,
+            )
+        }
+    }
+
+    private fun checkPassRequirements(
+        function: KtNamedFunction,
+        resolvedParameters: Map<KtParameter, KtClassOrObject?>,
+    ): Boolean {
+        val functionRequirement = functionUsageRequirements[function] ?: return true
+
+        return function.valueParameters.all { parameter ->
+            val resolvedParameterClassOrObject = resolvedParameters[parameter]
+                ?: return@all true
+
+            val parameterRequirements = functionRequirement.getParameterRequirements(parameter)
+                ?: return@all true
+
+            isParameterClassPassRequirements(resolvedParameterClassOrObject, parameterRequirements)
+        }
+    }
+
+    private fun isParameterClassPassRequirements(
+        parameterClass: KtClassOrObject,
+        parameterRequirements: List<ParameterRequirement>,
+    ): Boolean {
+        val parameterClasses = buildSet {
+            add(parameterClass)
+            addAll(getSuperClasses(parameterClass))
+        }
+
+        return isParameterClassPassRequirements(parameterClasses, parameterRequirements)
+    }
+
+    private fun isParameterClassPassRequirements(
+        parameterClasses: Set<KtClassOrObject>,
+        parameterRequirements: List<ParameterRequirement>,
+    ): Boolean {
+        return parameterRequirements.all { requirement ->
+            when (requirement) {
+                is ParameterRequirement.All -> isParameterClassesPassAllRequirement(parameterClasses, requirement)
+                is ParameterRequirement.AnyOf -> isParameterClassesPassAnyOfRequirement(parameterClasses, requirement)
+
+                is ParameterRequirement.Composite -> isParameterClassPassRequirements(
+                    parameterClasses = parameterClasses,
+                    parameterRequirements = requirement.requirements,
+                )
+            }
+        }
+    }
+
+    private fun isParameterClassesPassAllRequirement(
+        parameterClasses: Set<KtClassOrObject>,
+        parameterRequirement: ParameterRequirement.All,
+    ): Boolean {
+        return parameterRequirement.requirements.all { typeRequirement ->
+            isParameterClassesPassTypeRequirement(
+                parameterClasses = parameterClasses,
+                typeRequirement = typeRequirement,
+            )
+        }
+    }
+
+    private fun isParameterClassesPassAnyOfRequirement(
+        parameterClasses: Set<KtClassOrObject>,
+        parameterRequirement: ParameterRequirement.AnyOf,
+    ): Boolean {
+        return parameterRequirement.requirements.any { typeRequirement ->
+            isParameterClassesPassTypeRequirement(
+                parameterClasses = parameterClasses,
+                typeRequirement = typeRequirement,
+            )
+        }
+    }
+
+    private fun isParameterClassesPassTypeRequirement(
+        parameterClasses: Set<KtClassOrObject>,
+        typeRequirement: TypeRequirement,
+    ): Boolean {
+        val parameterIsInstanceOfRequiredType = typeRequirement.classOrObject in parameterClasses
+        return parameterIsInstanceOfRequiredType xor typeRequirement.isNegated
+    }
+
+    private fun resolveFunctionCallParameters(
+        callExpression: KtCallExpression,
+        function: KtNamedFunction,
+        resolvedParameters: Map<KtParameter, KtClassOrObject?>,
+    ): Map<KtParameter, KtClassOrObject?> {
+        val namedArgs = callExpression.valueArguments.associateBy { argument ->
+            argument.getArgumentName()?.name
+        }
+
+        return function.valueParameters.associateWith { parameter ->
+            val argument = namedArgs[parameter.name]
+                ?: callExpression.valueArguments.getOrNull(parameter.parameterIndex())
+                    ?.takeIf { arg -> arg.getArgumentName()?.name == null }
+
+            val parameterExpression = requireNotNull(argument?.getArgumentExpression() ?: parameter.defaultValue)
+
+            receiverInstanceClassResolver.resolveClass(
+                expression = parameterExpression,
+                scopeExpression = function,
+                knownResolutions = resolvedParameters,
+            )
+        }
+    }
+
     private fun collectReferencesStartsFromTests() {
-        collectReferencesQueue.addAll(tests.values.flatten())
+        tests.values.forEach { testFunctions ->
+            testFunctions.forEach { testFunction ->
+                collectReferencesStartsFromTest(testFunction)
+            }
+        }
+    }
+
+    private fun collectReferencesStartsFromTest(testFunction: KtNamedFunction) {
+        collectReferencesQueue.add(testFunction)
 
         while (collectReferencesQueue.isNotEmpty()) {
             val usedElement = collectReferencesQueue.removeFirst()
 
             if (usedElement === targetFunction) continue
-            usedReferences.add(usedElement)
+            usedReferencesCollector.add(usedElement)
 
             val ownerClass = PsiTreeUtil.getParentOfType(usedElement, KtClass::class.java)
             ownerClass?.let { usedClass ->
                 if (usedClass !in tests && usedClass !== targetClass) {
                     if (usedClass.isScannable()) {
                         if (usedClass.isTopLevel()) {
-                            referencedClasses.add(usedClass)
+                            referencedClassesCollector.add(usedClass)
                         }
                     }
                 }
@@ -266,21 +536,27 @@ private class CollectFunctionGenerationContextPipelineTask(
                 collectNestedDependencies(usedElement)
             }
         }
+
+        usedReferencesCollector.drainTo(usedReferences)
+        referencedClassesCollector.drainTo(referencedClasses)
+        branchFiltersCollector.drainTo(branchFilters)
     }
 
     private fun collectNestedDependencies(usedElement: PsiElement) {
         collectAnnotationReferences(usedElement)
-        usedElement.accept(NestedDependenciesCollector())
+        val collector = NestedDependenciesCollector()
+        usedElement.accept(collector)
     }
 
     private fun collectAnnotationReferences(usedElement: PsiElement) {
         when (usedElement) {
             is KtNamedFunction -> {
                 usedElement.annotationEntries.forEach { annotationEntry ->
-                    val userType = (annotationEntry.typeReference?.typeElement as? KtUserType) ?: return@forEach
-                    val annotationClass =
-                        userType.referenceExpression?.mainReference?.resolve() ?: return@forEach
-                    usedReferences.add(annotationClass)
+                    val userType = (annotationEntry.typeReference?.typeElement as? KtUserType)
+                        ?: return@forEach
+                    val annotationClass = userType.referenceExpression?.mainReference?.resolve()
+                        ?: return@forEach
+                    usedReferencesCollector.add(annotationClass)
                 }
             }
         }
@@ -335,7 +611,7 @@ private class CollectFunctionGenerationContextPipelineTask(
 
         private fun collectIfBranchFilter(ifExpression: KtIfExpression, usedBranches: Set<PsiElement>) {
             if (usedBranches.size == 1) {
-                branchFilters[ifExpression] = PsiElementContentFilter.If(
+                branchFiltersCollector[ifExpression] = PsiElementContentFilter.If(
                     expression = ifExpression,
                     isThen = ifExpression.then == usedBranches.single().firstChild,
                 )
@@ -344,7 +620,7 @@ private class CollectFunctionGenerationContextPipelineTask(
 
         private fun collectWhenBranchFilter(whenExpression: KtWhenExpression, usedBranches: Set<PsiElement>) {
             if (usedBranches.size in 1..<whenExpression.entries.size) {
-                branchFilters[whenExpression] = PsiElementContentFilter.When(
+                branchFiltersCollector[whenExpression] = PsiElementContentFilter.When(
                     expression = whenExpression,
                     entries = whenExpression.entries.filter(usedBranches::contains),
                 )
@@ -364,9 +640,9 @@ private class CollectFunctionGenerationContextPipelineTask(
 
         private fun onClassReference(reference: KtClass) {
             if (reference.isScannable() && reference.isTopLevel()) {
-                referencedClasses.add(reference)
+                referencedClassesCollector.add(reference)
             } else {
-                usedReferences.add(reference)
+                usedReferencesCollector.add(reference)
             }
         }
 
@@ -377,7 +653,7 @@ private class CollectFunctionGenerationContextPipelineTask(
                 constructedClass != null &&
                 constructedClass !== targetClass
             ) {
-                usedReferences.add(reference)
+                usedReferencesCollector.add(reference)
                 onClassReference(constructedClass)
             }
         }
@@ -385,7 +661,8 @@ private class CollectFunctionGenerationContextPipelineTask(
         private fun onDeclarationReference(reference: KtDeclaration) {
             if (
                 (reference.context is KtClassBody || reference.context is KtFile) &&
-                usedReferences.add(reference)
+                reference !in usedReferences &&
+                usedReferencesCollector.add(reference)
             ) {
                 if (reference.isScannable()) {
                     collectReferencesQueue.addFirst(reference)
@@ -422,9 +699,47 @@ private class CollectFunctionGenerationContextPipelineTask(
         }
     }
 
+    private fun <T> MutableCollection<T>.drainTo(other: MutableCollection<T>) {
+        other.addAll(this)
+        clear()
+    }
+
+    private fun <K, V> MutableMap<K, V>.drainTo(other: MutableMap<K, V>) {
+        other.putAll(this)
+        clear()
+    }
+
     private class VisitorBranchFilter(
         val root: PsiElement,
         val branches: Set<PsiElement>,
         var activeBranch: PsiElement? = null,
     )
+
+    private class FunctionRequirement {
+
+        private val parameterRequirements: MutableMap<KtParameter, MutableList<ParameterRequirement>> = mutableMapOf()
+
+        fun addParameterRequirement(param: KtParameter, requirement: ParameterRequirement) {
+            parameterRequirements.getOrPut(param, ::mutableListOf)
+                .add(requirement)
+        }
+
+        fun getParameterRequirements(parameter: KtParameter): List<ParameterRequirement>? {
+            return parameterRequirements[parameter]
+        }
+    }
+
+    private data class TypeRequirement(
+        val classOrObject: KtClassOrObject,
+        val isNegated: Boolean,
+    )
+
+    private sealed interface ParameterRequirement {
+
+        class AnyOf(val requirements: List<TypeRequirement>) : ParameterRequirement
+
+        class All(val requirements: List<TypeRequirement>) : ParameterRequirement
+
+        class Composite(val requirements: List<ParameterRequirement>) : ParameterRequirement
+    }
 }

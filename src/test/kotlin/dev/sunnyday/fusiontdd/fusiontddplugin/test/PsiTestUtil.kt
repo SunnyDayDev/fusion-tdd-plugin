@@ -41,7 +41,7 @@ fun JavaPsiFacade.getClass(name: String): KtClass {
 fun JavaPsiFacade.getHighLevelFun(fileClass: String, name: String): KtNamedFunction {
     val klass = findClass(fileClass, project.projectScope())
         ?.let { it as? KtLightClassForFacade }
-        ?: error("Can't find required class '$name'")
+        ?: error("Can't find required class '$fileClass'")
 
     val file = (klass.containingFile as? FakeFileForLightClass)?.ktFile
         ?: error("Can't get file of '$name'")
