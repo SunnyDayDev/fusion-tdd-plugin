@@ -201,7 +201,14 @@ private class CollectFunctionGenerationContextPipelineTask(
         return when (val usageContext = usageElementContext?.context) {
             is KtDotQualifiedExpression -> {
                 val usageFunctionScope = usageInfo.element?.parentOfType<KtNamedFunction>()
-                receiverInstanceClassResolver.resolveClass(usageContext.receiverExpression, usageFunctionScope)
+                receiverInstanceClassResolver.resolveClass(
+                    expression = usageContext.receiverExpression,
+                    stopConditions = usageFunctionScope?.let { scopeFunction ->
+                        listOf(
+                            ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(scopeFunction),
+                        )
+                    },
+                )
             }
 
             else -> null
@@ -268,7 +275,9 @@ private class CollectFunctionGenerationContextPipelineTask(
         val whenFunctionScope = whenExpression.parentOfType<KtNamedFunction>() ?: return
         val usedInWhenParameter = receiverInstanceClassResolver.resolveExpression(
             expression = whenExpression.subjectExpression,
-            scopeExpression = whenFunctionScope,
+            stopConditions = listOf(
+                ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(whenFunctionScope),
+            ),
         )
 
         if (usedInWhenParameter is KtParameter && usedInWhenParameter.ownerFunction === whenFunctionScope) {
@@ -364,6 +373,10 @@ private class CollectFunctionGenerationContextPipelineTask(
         var expression = condition.expression
         while (expression is KtDotQualifiedExpression) {
             expression = expression.selectorExpression
+        }
+
+        if (expression is KtConstructor<*>) {
+            return null
         }
 
         return (expression?.mainReference?.resolve() as? KtClassOrObject)
@@ -498,7 +511,9 @@ private class CollectFunctionGenerationContextPipelineTask(
 
             receiverInstanceClassResolver.resolveClass(
                 expression = parameterExpression,
-                scopeExpression = function,
+                stopConditions = listOf(
+                    ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(function),
+                ),
                 knownResolutions = resolvedParameters,
             )
         }

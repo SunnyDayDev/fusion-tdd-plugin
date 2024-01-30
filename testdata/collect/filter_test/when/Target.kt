@@ -24,12 +24,12 @@ class Target {
     fun onValue(event: Any): Int {
         return when (val whenProp = event) {
             Value(5) -> 5
-            Event.One -> onValueEventOne()
-            else -> 0
+            Event.One -> 1
+            else -> onValueElse()
         }
     }
 
-    private fun onValueEventOne() = 0
+    private fun onValueElse() = 0
 
     // endregion
 

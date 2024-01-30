@@ -364,10 +364,10 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         )
 
     @Test
-    fun `on 'is' case at 'when' with not all 'is' conditions, don't use requirements (pass all tests)`() =
+    fun `on else case at 'when' with not all 'is' conditions, don't use requirements (pass all tests)`() =
         executeCollectContextTest(
             prepareProject = { copyDirToProject("collect/filter_test/when") },
-            createStep = { createPipelineStep(targetFunction = "project.Target.onValueEventOne") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onValueElse") },
             assertStepResult = { context ->
                 assertThat(context.usedReferences).containsAtLeast(
                     getClassFunction("project.FilterTest.test onValueEventOne"),

@@ -200,7 +200,9 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
 
         val resolvedExpression = resolver.resolveExpression(
             expression = expression,
-            scopeExpression = scopeFunction,
+            stopConditions = listOf(
+                ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(scopeFunction),
+            ),
         )
 
         assertThat(resolvedExpression).isEqualTo(scopeFunction.valueParameters[0])
@@ -220,7 +222,9 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
 
         val resolvedExpression = resolver.resolveClass(
             expression = expression,
-            scopeExpression = scopeFunction,
+            stopConditions = listOf(
+                ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(scopeFunction),
+            ),
         )
 
         assertThat(resolvedExpression).isNull()

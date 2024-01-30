@@ -10,40 +10,40 @@ internal class ExpressionResultInstanceClassResolver {
 
     private val callArgumentsListStack = mutableListOf<KtValueArgumentList?>()
 
-    private var scopeExpression: KtExpression? = null
+    private var stopConditions: List<StopCondition> = emptyList()
     private var knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap()
 
     fun resolveClass(
         expression: KtExpression?,
-        scopeExpression: KtExpression? = null,
+        stopConditions: List<StopCondition>? = null,
         knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap(),
     ): KtClassOrObject? {
-        return withScope(scopeExpression, knownResolutions) {
+        return withScope(stopConditions, knownResolutions) {
             internalResolveClass(expression)
         }
     }
 
     fun resolveExpression(
         expression: KtExpression?,
-        scopeExpression: KtExpression? = null,
+        stopConditions: List<StopCondition>? = null,
         knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap(),
     ): KtExpression? {
-        return withScope(scopeExpression, knownResolutions) {
+        return withScope(stopConditions, knownResolutions) {
             internalResolveExpression(expression)
         }
     }
 
     private inline fun <T> withScope(
-        expression: KtExpression?,
+        stopConditions: List<StopCondition>? = null,
         resolutions: Map<out KtExpression, KtExpression?>,
         action: () -> T
     ): T {
-        scopeExpression = expression
+        this.stopConditions = stopConditions ?: emptyList()
         knownResolutions = resolutions
 
         val result = action.invoke()
 
-        scopeExpression = null
+        this.stopConditions = emptyList()
         knownResolutions = emptyMap()
 
         return result
@@ -116,8 +116,14 @@ internal class ExpressionResultInstanceClassResolver {
 
         return internalResolveExpression(instanceExpression)
     }
+
     private fun resolveParameterReference(parameter: KtParameter): KtExpression? {
-        if (parameter.ownerFunction === scopeExpression) {
+        if (
+            stopConditions.isNotEmpty() &&
+            stopConditions.any { stopCondition ->
+                (stopCondition as? StopCondition.FunctionParameter)?.function == parameter.ownerFunction
+            }
+        ) {
             return parameter
         }
 
@@ -205,5 +211,10 @@ internal class ExpressionResultInstanceClassResolver {
         }
 
         return result
+    }
+
+    sealed interface StopCondition {
+
+        data class FunctionParameter(val function: KtFunction) : StopCondition
     }
 }
