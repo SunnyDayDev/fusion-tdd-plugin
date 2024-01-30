@@ -389,7 +389,34 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
             }
         )
 
-    // region
+    // endregion
+
+    // region Object + Companion
+
+    @Test
+    fun `on met object reference, collect it as used classes`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.onSome") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassOrObject("project.Some.Object"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met companion object calls, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.createByCompanionFactory") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.DataClassWithCompanionFactory.Companion"),
+                getClassFunction("project.DataClassWithCompanionFactory.Companion.createInt"),
+            )
+        }
+    )
+
+    // endregion
 
     // region Utils + Fixtures
 

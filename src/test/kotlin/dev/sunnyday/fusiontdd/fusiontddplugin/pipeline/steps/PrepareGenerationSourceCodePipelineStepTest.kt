@@ -296,6 +296,71 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
     // endregion
 
+    // region Object, Companion
+
+    @Test
+    fun `on nested object in references, print it`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Some.kt",
+                    """
+                        sealed interface Some {
+                
+                            data object Value : Some
+                            data object Other : Some
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Some") {
+                setUsedReferences(getClassOrObject("Some.Value"))
+            },
+            expectedOutput = """
+                sealed interface Some {
+                
+                    data object Value : Some
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on companion factory in references, print it`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Some.kt",
+                    """
+                        data class Some<T>(val value: T) {
+                            companion object {
+                                fun createInt(value: Int): Some<Int>
+                                fun createOther(value: String): Some<String>
+                            }
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Some") {
+                setUsedReferences(
+                    getClassOrObject("Some.Companion"),
+                    getClassFunction("Some.Companion.createInt"),
+                )
+            },
+            expectedOutput = """
+                data class Some<T>(val value: T) {
+                
+                    companion object {
+                
+                        fun createInt(value: Int): Some<Int>
+                    }
+                }
+            """.trimIndent(),
+        )
+    }
+
+    // endregion
+
     // region Target function
 
     @Test

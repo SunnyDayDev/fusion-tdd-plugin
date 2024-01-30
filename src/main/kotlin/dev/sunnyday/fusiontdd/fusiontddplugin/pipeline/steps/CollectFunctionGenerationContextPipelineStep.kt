@@ -58,11 +58,11 @@ private class CollectFunctionGenerationContextPipelineTask(
 
     private val collectReferencesQueue: Deque<PsiElement> = ArrayDeque()
 
-    private val referencedClasses = mutableSetOf<KtClass>()
+    private val referencedClasses = mutableSetOf<KtClassOrObject>()
     private val usedReferences = mutableSetOf<PsiElement>(targetFunction)
     private val branchFilters = mutableMapOf<PsiElement, PsiElementContentFilter>()
 
-    private val referencedClassesCollector = mutableSetOf<KtClass>()
+    private val referencedClassesCollector = mutableSetOf<KtClassOrObject>()
     private val usedReferencesCollector = mutableSetOf<PsiElement>()
     private val branchFiltersCollector = mutableMapOf<PsiElement, PsiElementContentFilter>()
 
@@ -646,14 +646,14 @@ private class CollectFunctionGenerationContextPipelineTask(
             when (val reference = element.mainReference.resolve()) {
                 targetClass, null -> Unit // no-op
 
-                is KtClass -> onClassReference(reference)
+                is KtClassOrObject -> onClassReference(reference)
                 is KtConstructor<*> -> onConstructorReference(reference)
                 is KtProperty -> onDeclarationReference(reference)
                 is KtNamedFunction -> onDeclarationReference(reference)
             }
         }
 
-        private fun onClassReference(reference: KtClass) {
+        private fun onClassReference(reference: KtClassOrObject) {
             if (reference.isScannable() && reference.isTopLevel()) {
                 referencedClassesCollector.add(reference)
             } else {
