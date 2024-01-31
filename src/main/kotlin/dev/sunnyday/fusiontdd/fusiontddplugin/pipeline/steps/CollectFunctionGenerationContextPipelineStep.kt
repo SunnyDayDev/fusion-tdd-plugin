@@ -680,9 +680,21 @@ private class CollectFunctionGenerationContextPipelineTask(
                 usedReferencesCollector.add(reference)
             ) {
                 if (reference.isScannable()) {
+                    addDeclarationOwnersClassesToReferenced(reference)
+
                     collectReferencesQueue.addFirst(reference)
                 }
             }
+        }
+
+        private fun addDeclarationOwnersClassesToReferenced(reference: KtDeclaration) {
+            var classOrObject = reference.parentOfType<KtClassOrObject>(withSelf = false) ?: return
+            while (!classOrObject.isTopLevel()) {
+                usedReferencesCollector.add(classOrObject)
+                classOrObject = classOrObject.parentOfType<KtClassOrObject>(withSelf = false) ?: return
+            }
+
+            referencedClassesCollector.add(classOrObject)
         }
 
         override fun elementFinished(element: PsiElement?) {

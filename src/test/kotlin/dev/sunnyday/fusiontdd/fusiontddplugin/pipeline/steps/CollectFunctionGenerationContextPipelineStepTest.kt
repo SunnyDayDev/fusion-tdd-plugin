@@ -409,9 +409,62 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         prepareProject = { copyDirToProject("collect/object") },
         createStep = { createPipelineStep(targetFunction = "project.TargetClass.createByCompanionFactory") },
         assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.DataClassWithCompanionFactory"),
+            )
+
             assertThat(context.usedReferences).containsAtLeast(
                 getClassOrObject("project.DataClassWithCompanionFactory.Companion"),
                 getClassFunction("project.DataClassWithCompanionFactory.Companion.createInt"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met imported companion object calls, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.importedCall") },
+        assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.ImportedObjectCompanion"),
+            )
+
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.ImportedObjectCompanion.Companion"),
+                getClassFunction("project.ImportedObjectCompanion.Companion.importedCall"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met nested imported companion object calls, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.nestedImportedCall") },
+        assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.ImportedObjectCompanion"),
+            )
+
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.ImportedObjectCompanion.Nested"),
+                getClassOrObject("project.ImportedObjectCompanion.Nested.Companion"),
+                getClassFunction("project.ImportedObjectCompanion.Nested.Companion.nestedImportedCall"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met imported companion object properties, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.importedConst") },
+        assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.ImportedObjectCompanion"),
+            )
+
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.ImportedObjectCompanion.Companion"),
+                getClassProperty("project.ImportedObjectCompanion.Companion.CONST"),
             )
         }
     )
