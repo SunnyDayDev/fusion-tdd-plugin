@@ -507,7 +507,7 @@ private class CollectFunctionGenerationContextPipelineTask(
                 ?: callExpression.valueArguments.getOrNull(parameter.parameterIndex())
                     ?.takeIf { arg -> arg.getArgumentName()?.name == null }
 
-            val parameterExpression = requireNotNull(argument?.getArgumentExpression() ?: parameter.defaultValue)
+            val parameterExpression = argument?.getArgumentExpression() ?: parameter.defaultValue
 
             receiverInstanceClassResolver.resolveClass(
                 expression = parameterExpression,
