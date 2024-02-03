@@ -33,8 +33,8 @@ fun JavaCodeInsightTestFixture.getClassProperty(fqName: String): KtProperty {
     return getClassOrObject(className).getProperty(functionName)
 }
 
-fun JavaCodeInsightTestFixture.getHighLevelFun(fileClass: String, name: String): KtNamedFunction {
-    return javaFacade.getHighLevelFun(fileClass, name)
+fun JavaCodeInsightTestFixture.getTopLevelFun(fileClass: String, name: String): KtNamedFunction {
+    return javaFacade.getTopLevelFun(fileClass, name)
 }
 
 fun JavaPsiFacade.getClassOrObject(name: String): KtClassOrObject {
@@ -42,7 +42,7 @@ fun JavaPsiFacade.getClassOrObject(name: String): KtClassOrObject {
         ?: error("Can't find required class '$name'")
 }
 
-fun JavaPsiFacade.getHighLevelFun(fileClass: String, name: String): KtNamedFunction {
+fun JavaPsiFacade.getTopLevelFun(fileClass: String, name: String): KtNamedFunction {
     val klass = findClass(fileClass, project.projectScope())
         ?.let { it as? KtLightClassForFacade }
         ?: error("Can't find required class '$fileClass'")

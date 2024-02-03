@@ -59,12 +59,12 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
                         getClassFunction("project.TargetClass.targetFunction"),
 
                         getClassFunction("project.TestClass.testTarget"),
-                        getHighLevelFun("lib.LibKt", "usedFromTest"),
+                        getTopLevelFun("lib.LibKt", "usedFromTest"),
                         getClassProperty("project.TestClass.usedClass"),
                         getClassFunction("project.UsedClass.call"),
                         getClassProperty("project.TestClass.target"),
                         getClassFunction("project.TargetClass.usedFunction"),
-                        getHighLevelFun("lib.LibKt", "usedFromTarget"),
+                        getTopLevelFun("lib.LibKt", "usedFromTarget"),
                         getClass("project.UsedClass").primaryConstructor!!,
 
                         getClassFunction("project.TestClass.testTarget2"),
