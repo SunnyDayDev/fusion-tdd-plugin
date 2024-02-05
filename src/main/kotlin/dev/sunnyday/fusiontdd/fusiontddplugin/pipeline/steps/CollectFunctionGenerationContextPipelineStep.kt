@@ -611,13 +611,6 @@ private class CollectFunctionGenerationContextPipelineTask(
         private fun onBranchPointElement(element: PsiElement) {
             val usedBranches = branchPoints[element] ?: return
 
-            visitorBranchFiltersStack.add(
-                VisitorBranchFilter(
-                    root = element,
-                    branches = usedBranches,
-                )
-            )
-
             when (element) {
                 is KtIfExpression -> collectIfBranchFilter(element, usedBranches)
                 is KtWhenExpression -> collectWhenBranchFilter(element, usedBranches)
@@ -626,6 +619,10 @@ private class CollectFunctionGenerationContextPipelineTask(
 
         private fun collectIfBranchFilter(ifExpression: KtIfExpression, usedBranches: Set<PsiElement>) {
             if (usedBranches.size == 1) {
+                pushBranchFilterStack(ifExpression, usedBranches)
+
+                ifExpression.condition?.accept(NestedDependenciesCollector())
+
                 branchFiltersCollector[ifExpression] = PsiElementContentFilter.If(
                     expression = ifExpression,
                     isThen = ifExpression.then == usedBranches.single().firstChild,
@@ -635,11 +632,24 @@ private class CollectFunctionGenerationContextPipelineTask(
 
         private fun collectWhenBranchFilter(whenExpression: KtWhenExpression, usedBranches: Set<PsiElement>) {
             if (usedBranches.size in 1..<whenExpression.entries.size) {
+                pushBranchFilterStack(whenExpression, usedBranches)
+
+                whenExpression.subjectExpression?.accept(NestedDependenciesCollector())
+
                 branchFiltersCollector[whenExpression] = PsiElementContentFilter.When(
                     expression = whenExpression,
                     entries = whenExpression.entries.filter(usedBranches::contains),
                 )
             }
+        }
+
+        private fun pushBranchFilterStack(branchExpression: PsiElement, usedBranches: Set<PsiElement>) {
+            visitorBranchFiltersStack.add(
+                VisitorBranchFilter(
+                    root = branchExpression,
+                    branches = usedBranches,
+                )
+            )
         }
 
         private fun onReferenceExpression(element: KtNameReferenceExpression) {

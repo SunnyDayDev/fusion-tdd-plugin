@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtNamedFunction
 
+// TODO: List -> Set
 internal data class FunctionGenerationContext(
     val targetFunction: KtFunction?,
     val usedClasses: List<KtClassOrObject>,

@@ -9,4 +9,9 @@ class WhenTest {
     fun `test callerFun`() {
         When().execute(3)
     }
+
+    @Test
+    fun `test executeWithExpression`() {
+        When().executeWithExpression(3)
+    }
 }

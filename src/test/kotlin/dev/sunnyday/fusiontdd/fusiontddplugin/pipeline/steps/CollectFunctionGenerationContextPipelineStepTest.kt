@@ -206,6 +206,28 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     )
 
+    @Test
+    fun `on 'if' with expression and single branch used, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/if") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.doThenOnIfWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.Target.ifExpression")
+            )
+        }
+    )
+
+    @Test
+    fun `on 'if' with expression and both branches used, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/if") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.doBothOnIfWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.Target.ifExpression")
+            )
+        }
+    )
+
     // endregion
 
     // region 'when' branching
@@ -263,6 +285,28 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
                 getClassFunction("project.When.doSome"),
                 getClassFunction("project.When.doAll"),
                 getClassFunction("project.When.doElse"),
+            )
+        }
+    )
+
+    @Test
+    fun `on 'when' with expression and single branch, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/when") },
+        createStep = { createPipelineStep(targetFunction = "project.When.doSomeWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.When.whenExpression")
+            )
+        }
+    )
+
+    @Test
+    fun `on 'when' with expression and all branches, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/when") },
+        createStep = { createPipelineStep(targetFunction = "project.When.doAllWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.When.whenExpression")
             )
         }
     )
@@ -480,7 +524,10 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
     ) {
         runInEdtAndWait { fixture.prepareProject() }
 
-        val dependencies = runReadAction { fixture.createStep().executeAndWait().getOrNull() }
+        val dependencies = runReadAction {
+            val result = fixture.createStep().executeAndWait()
+            result.getOrNull()
+        }
 
         assertThat(dependencies).isNotNull()
         runReadAction { fixture.assertStepResult(dependencies!!) }
