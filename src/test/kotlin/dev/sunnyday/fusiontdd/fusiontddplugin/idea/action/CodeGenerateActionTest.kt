@@ -19,6 +19,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.GeneratingFunctionHig
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.execute
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.PrepareGenerationSourceCodePipelineStep
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClass
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClassFunction
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getNamedFunction
@@ -228,7 +229,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
                 targetFunction = refEq(targetFunction),
                 targetClass = refEq(targetClass),
             )
-            pipelineFactory.prepareGenerationSourceCode()
+            pipelineFactory.prepareGenerationSourceCode(any())
             pipelineFactory.confirmGenerationSource()
             pipelineFactory.generateCodeSuggestion()
             pipelineFactory.replaceFunctionBody(refEq(targetFunction))
@@ -238,6 +239,34 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             pipeline.confirmSource.execute(sourceForGeneration, any())
             pipeline.generateFunction.execute(confirmedSourceForGeneration, any())
             pipeline.replaceFunction.execute(refEq(generationResult), any())
+        }
+    }
+
+    @Test
+    fun `on perform action with forceAddComments, prepare source with forceAddComments`() {
+        val action = CodeGenerateAction(isInverseAddTestCommentsBeforeGenerationSetting = true)
+
+        configurePipelineMock()
+        runReadAction { action.actionPerformed(actionEvent) }
+
+        verify {
+            pipelineFactory.prepareGenerationSourceCode(
+                PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig(isInverseAddTestCommentsBeforeGenerationSetting = true)
+            )
+        }
+    }
+
+    @Test
+    fun `on perform action without forceAddComments, prepare source without forceAddComments`() {
+        val action = CodeGenerateAction(isInverseAddTestCommentsBeforeGenerationSetting = false)
+
+        configurePipelineMock()
+        runReadAction { action.actionPerformed(actionEvent) }
+
+        verify {
+            pipelineFactory.prepareGenerationSourceCode(
+                PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig(isInverseAddTestCommentsBeforeGenerationSetting = false)
+            )
         }
     }
 
@@ -361,7 +390,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
 
         pipelineFactory.apply {
             every { collectTestsAndUsedReferencesForFun(any(), any()) } returns collectDependencies
-            every { prepareGenerationSourceCode() } returns prepareSource
+            every { prepareGenerationSourceCode(any()) } returns prepareSource
             every { confirmGenerationSource() } returns confirmSource
             every { generateCodeSuggestion() } returns generateFunction
             every { replaceFunctionBody(any()) } returns replaceFunction

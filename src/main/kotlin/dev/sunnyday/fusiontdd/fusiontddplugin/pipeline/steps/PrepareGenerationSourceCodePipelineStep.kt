@@ -18,9 +18,19 @@ import org.jetbrains.kotlin.psi.*
 
 internal class PrepareGenerationSourceCodePipelineStep(
     private val settings: FusionTDDSettings,
+    private val config: PrepareSourceConfig = PrepareSourceConfig(),
 ) : PipelineStep<FunctionGenerationContext, CodeBlock> {
 
     private val logger = thisLogger()
+
+    private val isAddTestCommentsBeforeGeneration: Boolean
+        get() {
+            return if (config.isInverseAddTestCommentsBeforeGenerationSetting) {
+                !settings.isAddTestCommentsBeforeGeneration
+            } else {
+                settings.isAddTestCommentsBeforeGeneration
+            }
+        }
 
     override fun execute(input: FunctionGenerationContext, observer: (Result<CodeBlock>) -> Unit) {
         logger.debug("Pipeline: Prepare generation source for ${input.targetFunction?.name}")
@@ -167,7 +177,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
     }
 
     private fun StringBuilder.printTargetFunction(targetFunction: KtFunction, input: FunctionGenerationContext) {
-        var isTestCommentsAdded = !settings.isAddTestCommentsBeforeGeneration
+        var isTestCommentsAdded = !isAddTestCommentsBeforeGeneration
         var functionElement = targetFunction.firstChild
 
         while (functionElement != null && functionElement.nextSibling != null) {
@@ -192,7 +202,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         val isFirstFunDeclarationElement = functionElement is KtModifierList ||
                 functionElement.tokenType == KtTokens.FUN_KEYWORD
 
-        return if (isFirstFunDeclarationElement && settings.isAddTestCommentsBeforeGeneration) {
+        return if (isFirstFunDeclarationElement && isAddTestCommentsBeforeGeneration) {
             printTargetFunctionTestComments(input, functionElement)
             true
         } else {
@@ -471,6 +481,10 @@ internal class PrepareGenerationSourceCodePipelineStep(
             }
         }
     }
+
+    data class PrepareSourceConfig(
+        val isInverseAddTestCommentsBeforeGenerationSetting: Boolean = false,
+    )
 
     private companion object {
 
