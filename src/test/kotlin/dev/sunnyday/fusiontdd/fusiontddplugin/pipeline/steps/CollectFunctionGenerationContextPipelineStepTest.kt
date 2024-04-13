@@ -59,12 +59,12 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
                         getClassFunction("project.TargetClass.targetFunction"),
 
                         getClassFunction("project.TestClass.testTarget"),
-                        getHighLevelFun("lib.LibKt", "usedFromTest"),
+                        getTopLevelFun("lib.LibKt", "usedFromTest"),
                         getClassProperty("project.TestClass.usedClass"),
                         getClassFunction("project.UsedClass.call"),
                         getClassProperty("project.TestClass.target"),
                         getClassFunction("project.TargetClass.usedFunction"),
-                        getHighLevelFun("lib.LibKt", "usedFromTarget"),
+                        getTopLevelFun("lib.LibKt", "usedFromTarget"),
                         getClass("project.UsedClass").primaryConstructor!!,
 
                         getClassFunction("project.TestClass.testTarget2"),
@@ -206,6 +206,28 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     )
 
+    @Test
+    fun `on 'if' with expression and single branch used, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/if") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.doThenOnIfWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.Target.ifExpression")
+            )
+        }
+    )
+
+    @Test
+    fun `on 'if' with expression and both branches used, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/if") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.doBothOnIfWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.Target.ifExpression")
+            )
+        }
+    )
+
     // endregion
 
     // region 'when' branching
@@ -267,6 +289,28 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     )
 
+    @Test
+    fun `on 'when' with expression and single branch, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/when") },
+        createStep = { createPipelineStep(targetFunction = "project.When.doSomeWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.When.whenExpression")
+            )
+        }
+    )
+
+    @Test
+    fun `on 'when' with expression and all branches, collect expression references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/chain/when") },
+        createStep = { createPipelineStep(targetFunction = "project.When.doAllWithExpression") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.When.whenExpression")
+            )
+        }
+    )
+
     // endregion
 
     // endregion
@@ -323,6 +367,154 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     // endregion
 
+    // region Filter inaccessible test
+
+    @Test
+    fun `on condition case at 'when' branch with all 'is' conditions, skip tests that sends inaccessible args`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onEventOne") },
+            assertStepResult = { context ->
+                assertThat(context.tests.values.flatten()).contains(
+                    getClassFunction("project.FilterTest.test onEventOne"),
+                )
+
+                assertThat(context.tests.values.flatten()).containsNoneOf(
+                    getClassFunction("project.FilterTest.test onEventTwo"),
+                    getClassFunction("project.FilterTest.test onEventThree"),
+                    getClassFunction("project.FilterTest.test onEventFour"),
+                    getClassFunction("project.FilterTest.test Ignored"),
+                )
+            }
+        )
+
+    @Test
+    fun `on else case at 'when' branch with all 'is', skip tests that sends inaccessible args`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onElse") },
+            assertStepResult = { context ->
+                assertThat(context.usedReferences).containsAtLeast(
+                    getClassFunction("project.FilterTest.test onEventThree"),
+                    getClassFunction("project.FilterTest.test onEventFour"),
+                )
+
+                assertThat(context.usedReferences).containsNoneOf(
+                    getClassFunction("project.FilterTest.test onEventOne"),
+                    getClassFunction("project.FilterTest.test onEventTwo"),
+                    getClassFunction("project.FilterTest.test Ignored"),
+                )
+            }
+        )
+
+    @Test
+    fun `on else case at 'when' with not all 'is' conditions, don't use requirements (pass all tests)`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onValueElse") },
+            assertStepResult = { context ->
+                assertThat(context.usedReferences).containsAtLeast(
+                    getClassFunction("project.FilterTest.test onValueEventOne"),
+                    getClassFunction("project.FilterTest.test onValueValue"),
+                )
+            }
+        )
+
+    @Test
+    fun `on 'is' case at 'when' with range conditions, don't use requirements (pass all tests)`() =
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/filter_test/when") },
+            createStep = { createPipelineStep(targetFunction = "project.Target.onRangeConditionEventOne") },
+            assertStepResult = { context ->
+                assertThat(context.usedReferences).containsAtLeast(
+                    getClassFunction("project.FilterTest.test onRangeConditionEventOne"),
+                    getClassFunction("project.FilterTest.test onRangeConditionValue"),
+                )
+            }
+        )
+
+    // endregion
+
+    // region Object + Companion
+
+    @Test
+    fun `on met object reference, collect it as used classes`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.onSome") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassOrObject("project.Some.Object"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met companion object calls, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.createByCompanionFactory") },
+        assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.DataClassWithCompanionFactory"),
+            )
+
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.DataClassWithCompanionFactory.Companion"),
+                getClassFunction("project.DataClassWithCompanionFactory.Companion.createInt"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met imported companion object calls, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.importedCall") },
+        assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.ImportedObjectCompanion"),
+            )
+
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.ImportedObjectCompanion.Companion"),
+                getClassFunction("project.ImportedObjectCompanion.Companion.importedCall"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met nested imported companion object calls, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.nestedImportedCall") },
+        assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.ImportedObjectCompanion"),
+            )
+
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.ImportedObjectCompanion.Nested"),
+                getClassOrObject("project.ImportedObjectCompanion.Nested.Companion"),
+                getClassFunction("project.ImportedObjectCompanion.Nested.Companion.nestedImportedCall"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met imported companion object properties, collect it as used references`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/object") },
+        createStep = { createPipelineStep(targetFunction = "project.TargetClass.importedConst") },
+        assertStepResult = { context ->
+            assertThat(context.usedClasses).contains(
+                getClassOrObject("project.ImportedObjectCompanion"),
+            )
+
+            assertThat(context.usedReferences).containsAtLeast(
+                getClassOrObject("project.ImportedObjectCompanion.Companion"),
+                getClassProperty("project.ImportedObjectCompanion.Companion.CONST"),
+            )
+        }
+    )
+
+    // endregion
+
     // region Utils + Fixtures
 
     private fun executeCollectContextTest(
@@ -332,7 +524,10 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
     ) {
         runInEdtAndWait { fixture.prepareProject() }
 
-        val dependencies = runReadAction { fixture.createStep().executeAndWait().getOrNull() }
+        val dependencies = runReadAction {
+            val result = fixture.createStep().executeAndWait()
+            result.getOrNull()
+        }
 
         assertThat(dependencies).isNotNull()
         runReadAction { fixture.assertStepResult(dependencies!!) }

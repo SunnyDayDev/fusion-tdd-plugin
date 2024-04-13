@@ -7,6 +7,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.CodeBlock
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResult
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi.findKotlinClass
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.executeAndWait
+import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClassFunction
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.psiUtil.findFunctionByName
 import org.junit.jupiter.api.Test
@@ -24,9 +25,9 @@ class ReplaceFunctionBodyPipelineStepTest : LightJavaCodeInsightFixtureTestCase5
             variants = listOf(
                 CodeBlock(
                     """
-                        val x = 2 * 2
-                        println("replaced")
-                    """.trimIndent()
+                    |        val x = 2 * 2
+                    |        println("replaced")
+                    """.trimMargin()
                 )
             )
         )
@@ -39,9 +40,114 @@ class ReplaceFunctionBodyPipelineStepTest : LightJavaCodeInsightFixtureTestCase5
         assertThat(functionText).isEqualTo(
             """
                 fun doSomething() {
-                        val x = 2 * 2
+                    val x = 2 * 2
+                    println("replaced")
+                }
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun `on result with multiple functions, correctly replace it`() {
+        val file = fixture.addFileToProject(
+            "Replace.kt", """
+                class Replace {
+                
+                    fun targetFunction() = Unit
+                
+                }
+            """.trimIndent()
+        )
+        val generationResult = GenerateCodeBlockResult(
+            variants = listOf(
+                CodeBlock(
+                    """
+                    |        subFunction()
+                    |    }
+                    |    
+                    |    fun subFunction() {
+                    |        println("replaced")
+                    """.trimMargin()
+                )
+            )
+        )
+
+        val step = ReplaceFunctionBodyPipelineStep(
+            targetFunction = runReadAction { fixture.getClassFunction("Replace.targetFunction") },
+        )
+
+        val result = step.executeAndWait(generationResult)
+
+        assertThat(result.isSuccess).isTrue()
+
+        val actualFileText = runReadAction { file.text }
+
+        assertThat(actualFileText).isEqualTo(
+            """
+                class Replace {
+                
+                    fun targetFunction() {
+                        subFunction()
+                    }
+                
+                    fun subFunction() {
                         println("replaced")
                     }
+                
+                }
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun `on replace, keep spaces`() {
+        val file = fixture.addFileToProject(
+            "Replace.kt", """
+                class Replace {
+                    fun functionBefore() = Unit
+                
+                
+                    fun targetFunction() = Unit
+                
+                
+                    fun functionAfter() = Unit
+                }
+            """.trimIndent()
+        )
+        val generationResult = GenerateCodeBlockResult(
+            variants = listOf(
+                CodeBlock(
+                    """
+                    |        println("replaced")
+                    """.trimMargin()
+                )
+            )
+        )
+
+        val step = ReplaceFunctionBodyPipelineStep(
+            targetFunction = runReadAction {
+                fixture.getClassFunction("Replace.targetFunction") },
+        )
+
+        val result = step.executeAndWait(generationResult)
+
+        assertThat(result.isSuccess).isTrue()
+
+        val actualFileText = runReadAction { file.text }
+
+        assertThat(actualFileText).isEqualTo(
+            """
+                class Replace {
+                    fun functionBefore() = Unit
+                
+                
+                    fun targetFunction() {
+                        println("replaced")
+                    }
+                
+                
+                    fun functionAfter() = Unit
+                }
             """.trimIndent()
         )
     }

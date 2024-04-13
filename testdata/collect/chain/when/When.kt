@@ -8,9 +8,11 @@ class When {
                 doSome()
                 doAll()
             }
+
             2 -> {
                 doAll()
             }
+
             else -> {
                 doElse()
                 doAll()
@@ -18,15 +20,31 @@ class When {
         }
     }
 
-    private fun doSome() {
+    private fun doSome() = Unit
+    private fun doElse() = Unit
+    private fun doAll() = Unit
 
+    fun executeWithExpression(case: Int) {
+        when (whenExpression(case)) {
+            1 -> {
+                doSomeWithExpression()
+                doAllWithExpression()
+            }
+
+            2 -> {
+                doAllWithExpression()
+            }
+
+            else -> {
+                doElseWithExpression()
+                doAllWithExpression()
+            }
+        }
     }
 
-    private fun doElse() {
+    private fun whenExpression(case: Int): Int = case
 
-    }
-
-    private fun doAll() {
-
-    }
+    private fun doSomeWithExpression() = Unit
+    private fun doElseWithExpression() = Unit
+    private fun doAllWithExpression() = Unit
 }

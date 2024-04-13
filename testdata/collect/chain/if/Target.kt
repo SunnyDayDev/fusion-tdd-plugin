@@ -2,6 +2,8 @@ package project
 
 class Target {
 
+    // region common
+
     fun execute() {
         if (true) {
             doThen()
@@ -31,23 +33,34 @@ class Target {
         }
     }
 
-    private fun doThen2() {
+    private fun doThen2()  = Unit
+    private fun doElse2()  = Unit
 
+    private fun doThen3()  = Unit
+    private fun doElse3()  = Unit
+
+    private fun doBoth()  = Unit
+
+    // endregion
+
+    // region expression
+
+    fun executeWithExpression() {
+        if (ifExpression()) {
+            doThenOnIfWithExpression()
+            doBothOnIfWithExpression()
+        } else {
+            doElseOnIfWithExpression()
+            doBothOnIfWithExpression
+        }
     }
 
-    private fun doElse2() {
+    private fun doThenOnIfWithExpression() = Unit
+    private fun doElseOnIfWithExpression() = Unit
+    private fun doBothOnIfWithExpression() = Unit
 
-    }
+    private fun ifExpression(): Boolean = TODO()
 
-    private fun doThen3() {
 
-    }
-
-    private fun doElse3() {
-
-    }
-
-    private fun doBoth() {
-
-    }
+    // endregion
 }

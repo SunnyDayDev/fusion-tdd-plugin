@@ -7,6 +7,7 @@ internal sealed interface Either<out L, out R> {
     data class Right<R>(val value: R) : Either<Nothing, R>
 }
 
+
 internal fun <L> Either<L, *>.getLeftOrNull(): L? = (this as? Either.Left)?.value
 
 internal fun <R> Either<*, R>.getRightOrNull(): R? = (this as? Either.Right)?.value

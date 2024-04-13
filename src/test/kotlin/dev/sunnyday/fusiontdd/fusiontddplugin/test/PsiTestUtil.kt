@@ -14,34 +14,38 @@ import org.jetbrains.kotlin.psi.psiUtil.findFunctionByName
 import org.jetbrains.kotlin.psi.psiUtil.findPropertyByName
 
 fun JavaCodeInsightTestFixture.getClass(name: String): KtClass {
-    return javaFacade.getClass(name)
+    return getClassOrObject(name) as KtClass
+}
+
+fun JavaCodeInsightTestFixture.getClassOrObject(name: String): KtClassOrObject {
+    return javaFacade.getClassOrObject(name)
 }
 
 fun JavaCodeInsightTestFixture.getClassFunction(fqName: String): KtNamedFunction {
     val className = fqName.substringBeforeLast('.')
     val functionName = fqName.substringAfterLast('.')
-    return getClass(className).getNamedFunction(functionName)
+    return getClassOrObject(className).getNamedFunction(functionName)
 }
 
 fun JavaCodeInsightTestFixture.getClassProperty(fqName: String): KtProperty {
     val className = fqName.substringBeforeLast('.')
     val functionName = fqName.substringAfterLast('.')
-    return getClass(className).getProperty(functionName)
+    return getClassOrObject(className).getProperty(functionName)
 }
 
-fun JavaCodeInsightTestFixture.getHighLevelFun(fileClass: String, name: String): KtNamedFunction {
-    return javaFacade.getHighLevelFun(fileClass, name)
+fun JavaCodeInsightTestFixture.getTopLevelFun(fileClass: String, name: String): KtNamedFunction {
+    return javaFacade.getTopLevelFun(fileClass, name)
 }
 
-fun JavaPsiFacade.getClass(name: String): KtClass {
+fun JavaPsiFacade.getClassOrObject(name: String): KtClassOrObject {
     return findKotlinClass(name)
         ?: error("Can't find required class '$name'")
 }
 
-fun JavaPsiFacade.getHighLevelFun(fileClass: String, name: String): KtNamedFunction {
+fun JavaPsiFacade.getTopLevelFun(fileClass: String, name: String): KtNamedFunction {
     val klass = findClass(fileClass, project.projectScope())
         ?.let { it as? KtLightClassForFacade }
-        ?: error("Can't find required class '$name'")
+        ?: error("Can't find required class '$fileClass'")
 
     val file = (klass.containingFile as? FakeFileForLightClass)?.ktFile
         ?: error("Can't get file of '$name'")
@@ -62,12 +66,12 @@ fun JavaPsiFacade.getHighLevelFun(fileClass: String, name: String): KtNamedFunct
     return function ?: error("Can't find required function '$name'")
 }
 
-fun KtClass.getNamedFunction(name: String): KtNamedFunction {
+fun KtClassOrObject.getNamedFunction(name: String): KtNamedFunction {
     return findFunctionByName(name) as? KtNamedFunction
         ?: error("Can't find required function '$name'")
 }
 
-fun KtClass.getProperty(name: String): KtProperty {
+fun KtClassOrObject.getProperty(name: String): KtProperty {
     return findPropertyByName(name) as? KtProperty
         ?: error("Can't find required function '$name'")
 }

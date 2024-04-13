@@ -2,42 +2,152 @@ package dev.sunnyday.fusiontdd.fusiontddplugin.idea.psi
 
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.argumentIndex
+import org.jetbrains.kotlin.psi.psiUtil.parameterIndex
 
+// TODO: make ExpressionResultInstanceClassResolver thread safe?
 internal class ExpressionResultInstanceClassResolver {
 
-    fun resolve(expression: KtExpression?): KtClass? {
+    private val callArgumentsListStack = mutableListOf<KtValueArgumentList?>()
+
+    private var stopConditions: List<StopCondition> = emptyList()
+    private var knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap()
+
+    fun resolveClass(
+        expression: KtExpression?,
+        stopConditions: List<StopCondition>? = null,
+        knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap(),
+    ): KtClassOrObject? {
+        return withScope(stopConditions, knownResolutions) {
+            internalResolveClass(expression)
+        }
+    }
+
+    fun resolveExpression(
+        expression: KtExpression?,
+        stopConditions: List<StopCondition>? = null,
+        knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap(),
+    ): KtExpression? {
+        return withScope(stopConditions, knownResolutions) {
+            internalResolveExpression(expression)
+        }
+    }
+
+    private inline fun <T> withScope(
+        stopConditions: List<StopCondition>? = null,
+        resolutions: Map<out KtExpression, KtExpression?>,
+        action: () -> T
+    ): T {
+        this.stopConditions = stopConditions ?: emptyList()
+        knownResolutions = resolutions
+
+        val result = action.invoke()
+
+        this.stopConditions = emptyList()
+        knownResolutions = emptyMap()
+
+        return result
+    }
+
+    private fun internalResolveClass(expression: KtExpression?): KtClassOrObject? {
         return when (expression) {
             null -> null
-            is KtCallExpression -> resolve(expression.calleeExpression)
-            is KtReferenceExpression -> resolveReferenceExpression(expression)
-            is KtBlockExpression -> resolve(expression.statements.lastOrNull())
-            is KtReturnExpression -> resolve(expression.returnedExpression)
+
+            is KtClassOrObject -> expression
             is KtIfExpression -> resolveIfExpression(expression)
             is KtWhenExpression -> resolveWhenExpression(expression)
-            else -> null
+
+            else -> {
+                val resolvedExpression = internalResolveExpression(expression)
+
+                if (resolvedExpression === expression) {
+                    null
+                } else {
+                    internalResolveClass(resolvedExpression)
+                }
+            }
         }
     }
 
-    private fun resolveReferenceExpression(referenceExpression: KtReferenceExpression): KtClass? {
+    // TODO: KtConstantExpression, KtStringTemplateExpression ...
+    private fun internalResolveExpression(expression: KtExpression?): KtExpression? {
+        return when (expression) {
+            null -> null
+            is KtClassOrObject -> return expression
+
+            is KtProperty -> resolveReferencedPropertyExpression(expression)
+            is KtConstructor<*> -> internalResolveExpression(expression.getContainingClassOrObject())
+            is KtFunction -> internalResolveExpression(expression.bodyExpression)
+            is KtParameter -> resolveParameterReference(expression)
+
+            is KtDotQualifiedExpression -> internalResolveExpression(expression.selectorExpression)
+            is KtConstructorCalleeExpression -> internalResolveExpression(expression.constructorReferenceExpression)
+            is KtBlockExpression -> internalResolveExpression(expression.statements.lastOrNull())
+            is KtReturnExpression -> internalResolveExpression(expression.returnedExpression)
+            is KtCallExpression -> resoleCallExpression(expression)
+            is KtReferenceExpression -> resolveReferenceExpression(expression)
+
+            in knownResolutions -> internalResolveExpression(knownResolutions[expression])
+
+            else -> expression
+        }
+    }
+
+    private fun resoleCallExpression(expression: KtCallExpression): KtExpression? {
+        val calleeExpression = expression.calleeExpression ?: return expression
+        val valueArgumentList = expression.valueArgumentList
+
+        callArgumentsListStack.add(valueArgumentList)
+
+        return internalResolveExpression(calleeExpression)
+            .also { callArgumentsListStack.removeLast() }
+    }
+
+    private fun resolveReferenceExpression(referenceExpression: KtReferenceExpression): KtExpression? {
         return when (val reference = referenceExpression.mainReference.resolve()) {
-            is KtClass -> return reference
-            is KtProperty -> resolveReferencedPropertyExpression(reference)
-            is KtFunction -> resolve(reference.bodyExpression)
+            is KtExpression -> internalResolveExpression(reference)
             else -> null
         }
     }
 
-    private fun resolveReferencedPropertyExpression(property: KtProperty): KtClass? {
+    private fun resolveReferencedPropertyExpression(property: KtProperty): KtExpression? {
         val instanceExpression = property.initializer
             ?: property.getter?.bodyExpression
-            ?: property.getter?.bodyBlockExpression
 
-        return resolve(instanceExpression)
+        return internalResolveExpression(instanceExpression)
     }
 
-    private fun resolveIfExpression(expression: KtIfExpression): KtClass? {
-        val thenClass = resolve(expression.then)
-        val elseClass = resolve(expression.`else`)
+    private fun resolveParameterReference(parameter: KtParameter): KtExpression? {
+        if (
+            stopConditions.isNotEmpty() &&
+            stopConditions.any { stopCondition ->
+                (stopCondition as? StopCondition.FunctionParameter)?.function == parameter.ownerFunction
+            }
+        ) {
+            return parameter
+        }
+
+        val valueArguments = callArgumentsListStack.lastOrNull()?.arguments.orEmpty()
+        val valueArgument = valueArguments.firstOrNull { arg -> isArgumentForParameter(arg, parameter) }
+
+        return if (valueArgument != null) {
+            internalResolveExpression(valueArgument.getArgumentExpression())
+        } else {
+            internalResolveExpression(parameter.defaultValue)
+        }
+    }
+
+    private fun isArgumentForParameter(argument: KtValueArgument, parameter: KtParameter): Boolean {
+        val name = argument.getArgumentName()?.name
+
+        return name == null && argument.argumentIndex == parameter.parameterIndex() ||
+                name == parameter.name
+    }
+
+
+    private fun resolveIfExpression(expression: KtIfExpression): KtClassOrObject? {
+        val thenClass = internalResolveClass(expression.then)
+        val elseClass = internalResolveClass(expression.`else`)
 
         if (thenClass == null || elseClass == null) {
             return thenClass ?: elseClass
@@ -49,18 +159,18 @@ internal class ExpressionResultInstanceClassResolver {
         return findLastCommon(listOf(thenInheritanceChain, elseInheritanceChain))
     }
 
-    private fun resolveWhenExpression(expression: KtWhenExpression): KtClass? {
+    private fun resolveWhenExpression(expression: KtWhenExpression): KtClassOrObject? {
         val expressionsInheritanceChains = expression.entries.mapNotNullTo(mutableListOf()) { whenEntry ->
-            resolve(whenEntry.expression)
+            internalResolveClass(whenEntry.expression)
                 ?.let(::getInheritanceChain)
         }
 
         return findLastCommon(expressionsInheritanceChains)
     }
 
-    private fun getInheritanceChain(klass: KtClass): List<KtClass> {
+    private fun getInheritanceChain(klass: KtClassOrObject): List<KtClassOrObject> {
         return buildList {
-            var currentClass: KtClass? = klass
+            var currentClass: KtClassOrObject? = klass
             while (currentClass != null) {
                 add(currentClass)
                 currentClass = currentClass.superTypeListEntries.firstOrNull()?.resolveClass()
@@ -101,5 +211,10 @@ internal class ExpressionResultInstanceClassResolver {
         }
 
         return result
+    }
+
+    sealed interface StopCondition {
+
+        data class FunctionParameter(val function: KtFunction) : StopCondition
     }
 }

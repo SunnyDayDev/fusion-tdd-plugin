@@ -69,7 +69,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
     }
 
     private fun StringBuilder.printUsedClass(
-        klass: KtClass,
+        klass: KtClassOrObject,
         input: FunctionGenerationContext,
     ) {
         printClassTitleWithPrimaryConstructor(klass)
@@ -92,6 +92,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
 
         if (!isEmpty) {
+            append(klass.body?.rBrace?.getPreviousWhiteSpaceIndent().orEmpty())
             append("}")
         } else {
             while (last() == ' ') {
@@ -100,7 +101,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun StringBuilder.printClassTitleWithPrimaryConstructor(klass: KtClass) {
+    private fun StringBuilder.printClassTitleWithPrimaryConstructor(klass: KtClassOrObject) {
         var titleElement = klass.firstChild
         while (titleElement !== klass.body) {
             when (titleElement) {
@@ -113,12 +114,12 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
     }
 
-    private fun StringBuilder.printClassTitleDeclarationModifierList(modifierList: KtModifierList, klass: KtClass) {
+    private fun StringBuilder.printClassTitleDeclarationModifierList(modifierList: KtModifierList, klass: KtClassOrObject) {
         val allowedModifiers = getClassDeclarationAllowedModifiers(klass)
         printClassTitleDeclarationModifierList(modifierList, allowedModifiers)
     }
 
-    private fun getClassDeclarationAllowedModifiers(klass: KtClass): Set<KtModifierKeywordToken> {
+    private fun getClassDeclarationAllowedModifiers(klass: KtClassOrObject): Set<KtModifierKeywordToken> {
         return if (klass.isTopLevel()) {
             TOP_LEVEL_CLASS_ALLOWED_MODIFIERS
         } else {
@@ -150,7 +151,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
     private fun StringBuilder.printClassDeclarationItem(declaration: KtDeclaration, input: FunctionGenerationContext) {
         when (declaration) {
-            is KtClass -> {
+            is KtClassOrObject -> {
                 printUsedClass(declaration, input)
                 appendLine()
             }
@@ -481,6 +482,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
             KtTokens.DATA_KEYWORD,
             KtTokens.VALUE_KEYWORD,
             KtTokens.SEALED_KEYWORD,
+            KtTokens.COMPANION_KEYWORD,
         )
 
         @JvmField
@@ -489,6 +491,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
             KtTokens.DATA_KEYWORD,
             KtTokens.VALUE_KEYWORD,
             KtTokens.SEALED_KEYWORD,
+            KtTokens.COMPANION_KEYWORD,
         )
 
         private fun PsiElement.getPreviousWhiteSpaceIndent(): String {
