@@ -299,8 +299,10 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
         )
     }
 
+    // region Abstract
+
     @Test
-    fun `on function without body, add abstract modifier`() {
+    fun `on class function without body, add abstract modifier`() {
         executePrepareGenerationSourceCodeTest(
             prepareFixture = {
                 addFileToProject(
@@ -324,6 +326,60 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             """.trimIndent(),
         )
     }
+
+    @Test
+    fun `on interface function without body, don't add abstract modifier`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Target.kt",
+                    """
+                        interface Target {
+                
+                            fun target(): Int
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Target") {
+                setUsedReferences(getClassFunction("Target.target"))
+            },
+            expectedOutput = """
+                interface Target {
+                
+                    fun target(): Int
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on abstract function without body, don't add abstract modifier`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Target.kt",
+                    """
+                        class Target {
+                
+                            private abstract fun target(): Int
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Target") {
+                setUsedReferences(getClassFunction("Target.target"))
+            },
+            expectedOutput = """
+                class Target {
+                
+                    private abstract fun target(): Int
+                }
+            """.trimIndent(),
+        )
+    }
+
+    // endregion
 
     // endregion
 

@@ -10,6 +10,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.PsiElementContentFilt
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
+import org.jetbrains.kotlin.idea.refactoring.isAbstract
 import org.jetbrains.kotlin.idea.util.CommentSaver.Companion.tokenType
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
@@ -254,8 +255,15 @@ internal class PrepareGenerationSourceCodePipelineStep(
     }
 
     private fun StringBuilder.printNoBodyFunction(function: KtNamedFunction) {
-        append("abstract ")
+        if (!(function.isAbstract() || isInterfaceDeclaration(function))) {
+            append("abstract ")
+        }
+
         appendLine(function.text)
+    }
+
+    private fun isInterfaceDeclaration(declaration: KtDeclaration): Boolean {
+        return declaration.context is KtClassBody && (declaration.context?.context as KtClass).isInterface()
     }
 
     private fun StringBuilder.printFilterableElement(
@@ -325,7 +333,8 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
                 // Skip other branch
                 filter.expression.then,
-                filter.expression.`else` -> {
+                filter.expression.`else`,
+                -> {
                     skipElement()
                 }
 
@@ -443,7 +452,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
     }
 
     private open class PrintLeafVisitor(
-        private val builder: StringBuilder
+        private val builder: StringBuilder,
     ) : PsiRecursiveElementWalkingVisitor() {
 
         private var skipElement: PsiElement? = null
