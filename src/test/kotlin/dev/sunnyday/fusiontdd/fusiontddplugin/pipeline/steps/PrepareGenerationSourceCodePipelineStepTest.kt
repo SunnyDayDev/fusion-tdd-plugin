@@ -299,6 +299,32 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
         )
     }
 
+    @Test
+    fun `on function without body, add abstract modifier`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = {
+                addFileToProject(
+                    "Target.kt",
+                    """
+                        class Target {
+                
+                            private fun target(): Int
+                        }
+                    """.trimIndent(),
+                )
+            },
+            buildContext = simpleClassContextBuilder("Target") {
+                setUsedReferences(getClassFunction("Target.target"))
+            },
+            expectedOutput = """
+                class Target {
+                
+                    abstract private fun target(): Int
+                }
+            """.trimIndent(),
+        )
+    }
+
     // endregion
 
     // endregion
@@ -341,8 +367,8 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                     """
                         data class Some<T>(val value: T) {
                             companion object {
-                                fun createInt(value: Int): Some<Int>
-                                fun createOther(value: String): Some<String>
+                                fun createInt(value: Int): Some<Int> = TODO()
+                                fun createOther(value: String): Some<String> = TODO()
                             }
                         }
                     """.trimIndent(),
@@ -359,7 +385,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                 
                     companion object {
                 
-                        fun createInt(value: Int): Some<Int>
+                        fun createInt(value: Int): Some<Int> = TODO()
                     }
                 }
             """.trimIndent(),
