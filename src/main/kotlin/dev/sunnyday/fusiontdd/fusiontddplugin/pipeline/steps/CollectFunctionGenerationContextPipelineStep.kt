@@ -80,7 +80,7 @@ private class CollectFunctionGenerationContextPipelineTask(
         )
         referencedClasses.addAll(tests.keys)
 
-        collectReferencesStartsFromTests()
+        collectGenerationContextUsedReferences()
 
         referencedClasses.add(targetClass)
 
@@ -519,42 +519,73 @@ private class CollectFunctionGenerationContextPipelineTask(
         }
     }
 
-    private fun collectReferencesStartsFromTests() {
+    private fun collectGenerationContextUsedReferences() {
         tests.values.forEach { testFunctions ->
             testFunctions.forEach { testFunction ->
-                collectReferencesStartsFromTest(testFunction)
+                collectUsedReferences(testFunction)
+            }
+        }
+
+        proceedCollectWithSeparatedCollectorAndDrain {
+            collectNestedDependencies(targetFunction)
+        }
+    }
+
+    private fun collectUsedReferences(function: KtNamedFunction) {
+        proceedCollectWithSeparatedCollectorAndDrain {
+            collectReferencesQueue.add(function)
+
+            while (collectReferencesQueue.isNotEmpty()) {
+                val usedElement = collectReferencesQueue.removeFirst()
+
+                if (usedElement === targetFunction) continue
+                usedReferencesCollector.add(usedElement)
+
+                val ownerClass = PsiTreeUtil.getParentOfType(usedElement, KtClass::class.java)
+                ownerClass?.let { usedClass ->
+                    if (usedClass !in tests && usedClass !== targetClass) {
+                        if (usedClass.isScannable()) {
+                            if (usedClass.isTopLevel()) {
+                                referencedClassesCollector.add(usedClass)
+                            }
+                        }
+                    }
+                }
+
+                if (usedElement.isScannable()) {
+                    collectNestedDependencies(usedElement)
+                }
             }
         }
     }
 
-    private fun collectReferencesStartsFromTest(testFunction: KtNamedFunction) {
-        collectReferencesQueue.add(testFunction)
+    private fun proceedCollectWithSeparatedCollectorAndDrain(collect: () -> Unit) {
+        proceedCollectWithSeparatedCollector {
+            collect.invoke()
+            true
+        }
+    }
 
-        while (collectReferencesQueue.isNotEmpty()) {
-            val usedElement = collectReferencesQueue.removeFirst()
+    private fun proceedCollectWithSeparatedCollector(collect: () -> Boolean) {
+        val isSuccess = collect.invoke()
 
-            if (usedElement === targetFunction) continue
-            usedReferencesCollector.add(usedElement)
-
-            val ownerClass = PsiTreeUtil.getParentOfType(usedElement, KtClass::class.java)
-            ownerClass?.let { usedClass ->
-                if (usedClass !in tests && usedClass !== targetClass) {
-                    if (usedClass.isScannable()) {
-                        if (usedClass.isTopLevel()) {
-                            referencedClassesCollector.add(usedClass)
-                        }
-                    }
-                }
-            }
-
-            if (usedElement.isScannable()) {
-                collectNestedDependencies(usedElement)
-            }
+        if (isSuccess) {
+            copyCollectorsToCollectedContext()
         }
 
-        usedReferencesCollector.drainTo(usedReferences)
-        referencedClassesCollector.drainTo(referencedClasses)
-        branchFiltersCollector.drainTo(branchFilters)
+        clearCollectors()
+    }
+
+    private fun copyCollectorsToCollectedContext() {
+        usedReferences.addAll(usedReferencesCollector)
+        referencedClasses.addAll(referencedClassesCollector)
+        branchFilters.putAll(branchFiltersCollector)
+    }
+
+    private fun clearCollectors() {
+        usedReferencesCollector.clear()
+        referencedClassesCollector.clear()
+        branchFiltersCollector.clear()
     }
 
     private fun collectNestedDependencies(usedElement: PsiElement) {
@@ -571,10 +602,14 @@ private class CollectFunctionGenerationContextPipelineTask(
                         ?: return@forEach
                     val annotationClass = userType.referenceExpression?.mainReference?.resolve()
                         ?: return@forEach
-                    usedReferencesCollector.add(annotationClass)
+                    addUniqueUsedReferenceToCollector(annotationClass)
                 }
             }
         }
+    }
+
+    private fun addUniqueUsedReferenceToCollector(usedElement: PsiElement): Boolean {
+        return !usedReferences.contains(usedElement) && usedReferencesCollector.add(usedElement)
     }
 
     private inner class NestedDependenciesCollector : PsiRecursiveElementWalkingVisitor() {
@@ -667,7 +702,7 @@ private class CollectFunctionGenerationContextPipelineTask(
             if (reference.isScannable() && reference.isTopLevel()) {
                 referencedClassesCollector.add(reference)
             } else {
-                usedReferencesCollector.add(reference)
+                addUniqueUsedReferenceToCollector(reference)
             }
         }
 
@@ -678,7 +713,7 @@ private class CollectFunctionGenerationContextPipelineTask(
                 constructedClass != null &&
                 constructedClass !== targetClass
             ) {
-                usedReferencesCollector.add(reference)
+                addUniqueUsedReferenceToCollector(reference)
                 onClassReference(constructedClass)
             }
         }
@@ -687,7 +722,7 @@ private class CollectFunctionGenerationContextPipelineTask(
             if (
                 (reference.context is KtClassBody || reference.context is KtFile) &&
                 reference !in usedReferences &&
-                usedReferencesCollector.add(reference)
+                addUniqueUsedReferenceToCollector(reference)
             ) {
                 if (reference.isScannable()) {
                     addDeclarationOwnersClassesToReferenced(reference)
@@ -700,7 +735,7 @@ private class CollectFunctionGenerationContextPipelineTask(
         private fun addDeclarationOwnersClassesToReferenced(reference: KtDeclaration) {
             var classOrObject = reference.parentOfType<KtClassOrObject>(withSelf = false) ?: return
             while (!classOrObject.isTopLevel()) {
-                usedReferencesCollector.add(classOrObject)
+                addUniqueUsedReferenceToCollector(classOrObject)
                 classOrObject = classOrObject.parentOfType<KtClassOrObject>(withSelf = false) ?: return
             }
 
@@ -734,16 +769,6 @@ private class CollectFunctionGenerationContextPipelineTask(
             val annotationText = it.text
             testAnnotationRegex.matches(annotationText)
         }
-    }
-
-    private fun <T> MutableCollection<T>.drainTo(other: MutableCollection<T>) {
-        other.addAll(this)
-        clear()
-    }
-
-    private fun <K, V> MutableMap<K, V>.drainTo(other: MutableMap<K, V>) {
-        other.putAll(this)
-        clear()
     }
 
     private class VisitorBranchFilter(
