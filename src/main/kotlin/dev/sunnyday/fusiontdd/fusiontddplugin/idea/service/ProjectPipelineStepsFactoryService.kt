@@ -29,9 +29,12 @@ internal class ProjectPipelineStepsFactoryService(
         )
     }
 
-    override fun prepareGenerationSourceCode(): PipelineStep<FunctionGenerationContext, CodeBlock> {
+    override fun prepareGenerationSourceCode(
+        config: PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig
+    ): PipelineStep<FunctionGenerationContext, CodeBlock> {
         return PrepareGenerationSourceCodePipelineStep(
             settings = project.service(),
+            config = config,
         )
     }
 

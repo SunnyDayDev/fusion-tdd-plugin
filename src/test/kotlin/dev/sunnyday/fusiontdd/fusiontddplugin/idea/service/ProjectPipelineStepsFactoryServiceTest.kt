@@ -32,7 +32,9 @@ class ProjectPipelineStepsFactoryServiceTest : LightJavaCodeInsightFixtureTestCa
 
     @Test
     fun `create step for prepareGenerationSourceCode`() {
-        val actualStep = provider.prepareGenerationSourceCode()
+        val actualStep = provider.prepareGenerationSourceCode(
+            config = PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig(),
+        )
 
         assertThat(actualStep).isInstanceOf(PrepareGenerationSourceCodePipelineStep::class.java)
     }

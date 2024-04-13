@@ -17,18 +17,26 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.requireRight
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.service.GeneratingFunctionHighlightAnimatorProvider
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.*
+import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.PrepareGenerationSourceCodePipelineStep
 import org.jetbrains.kotlin.idea.base.util.letIf
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNamedFunction
 
 
-class CodeGenerateAction : AnAction() {
+internal class CodeGenerateAction(
+    private val isInverseAddTestCommentsBeforeGenerationSetting: Boolean = false,
+) : AnAction() {
 
     private val logger: Logger = thisLogger()
 
     init {
-        templatePresentation.description = "Generate function body by its tests"
-        templatePresentation.text = "TDD Generate"
+        if (isInverseAddTestCommentsBeforeGenerationSetting) {
+            templatePresentation.description = "Generate function body by its tests, with inverted 'Add tests comments before generation' setting"
+            templatePresentation.text = "TDD Generate - Inverse Add Comments"
+        } else {
+            templatePresentation.description = "Generate function body by its tests"
+            templatePresentation.text = "TDD Generate"
+        }
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {
@@ -104,7 +112,13 @@ class CodeGenerateAction : AnAction() {
         targetClass: KtClass,
     ): PipelineStep<Nothing?, CodeBlock> {
         return collectTestsAndUsedReferencesForFun(targetFunction, targetClass)
-            .andThen(prepareGenerationSourceCode())
+            .andThen(
+                prepareGenerationSourceCode(
+                    PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig(
+                        isInverseAddTestCommentsBeforeGenerationSetting = isInverseAddTestCommentsBeforeGenerationSetting,
+                    )
+                )
+            )
             .andThen(confirmGenerationSource())
     }
 
@@ -144,6 +158,7 @@ class CodeGenerateAction : AnAction() {
     companion object {
 
         const val ID = "dev.sunnyday.fusiontdd.action.generate"
+        const val INVERSE_COMMENTS_ID = "dev.sunnyday.fusiontdd.action.generate.inversecomments"
         const val GENERATE_FUNCTION_RETRIES_COUNT = 3
     }
 }

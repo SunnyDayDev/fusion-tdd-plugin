@@ -13,6 +13,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import io.mockk.clearAllMocks
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -71,10 +72,18 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
     }
 
     @Test
-    fun `if action triggered in file with caret at function, show actions`() {
+    fun `if action triggered in file with caret at function, show actions`() = mockkStatic(ActionManager::class) {
+        val actionManager = mockk<ActionManager>(relaxed = true) {
+            every { getAction(any()) } answers { TestAction(arg(0)) }
+        }
+        every { ActionManager.getInstance() } returns actionManager
+
         val actions = runReadAction { actionsGroup.getChildren(action) }
 
-        assertThat(actions).isNotEmpty()
+        assertThat(actions).asList().containsExactly(
+            TestAction(CodeGenerateAction.ID),
+            TestAction(CodeGenerateAction.INVERSE_COMMENTS_ID),
+        )
     }
 
     @Test
@@ -159,5 +168,9 @@ class CodeGenerateActionGroupTest : LightJavaCodeInsightFixtureTestCase5() {
         val actions = runReadAction { actionsGroup.getChildren(action) }
 
         assertThat(actions).isEmpty()
+    }
+
+    private data class TestAction(val id: String) : AnAction() {
+        override fun actionPerformed(p0: AnActionEvent) = Unit
     }
 }

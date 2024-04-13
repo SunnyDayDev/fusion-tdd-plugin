@@ -43,13 +43,33 @@ class CodeGenerateActionGroup : ActionGroup(), DumbAware {
             return EMPTY_ARRAY
         }
 
-        return arrayOf(getOrCreateCodeGenerateAction())
+        return arrayOf(
+            getCommonGenerateCodeAction(),
+            getForceCommentsGenerateAction(),
+        )
     }
 
-    private fun getOrCreateCodeGenerateAction(): AnAction {
+    private fun getCommonGenerateCodeAction(): AnAction {
+        return getOrCreateCodeGenerateAction(CodeGenerateAction.ID) {
+            CodeGenerateAction()
+        }
+    }
+
+    private fun getForceCommentsGenerateAction(): AnAction {
+        return getOrCreateCodeGenerateAction(CodeGenerateAction.INVERSE_COMMENTS_ID) {
+            CodeGenerateAction(
+                isInverseAddTestCommentsBeforeGenerationSetting = true,
+            )
+        }
+    }
+
+    private fun getOrCreateCodeGenerateAction(
+        id: String,
+        actionFactory: () -> CodeGenerateAction,
+    ): AnAction {
         val actionManager = ActionManager.getInstance()
-        return actionManager.getAction(CodeGenerateAction.ID) ?: CodeGenerateAction().also { action ->
-            actionManager.registerAction(CodeGenerateAction.ID, action)
+        return actionManager.getAction(id) ?: actionFactory.invoke().also { action ->
+            actionManager.registerAction(id, action)
         }
     }
 }

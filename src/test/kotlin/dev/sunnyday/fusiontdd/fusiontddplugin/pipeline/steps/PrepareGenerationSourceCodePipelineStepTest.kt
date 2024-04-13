@@ -28,7 +28,14 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
     private val settings = mockk<FusionTDDSettings>()
 
-    private val step = PrepareGenerationSourceCodePipelineStep(settings)
+    private var prepareSourceConfig: PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig = PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig()
+
+    private val step by lazy(LazyThreadSafetyMode.NONE) {
+        PrepareGenerationSourceCodePipelineStep(
+            settings = settings,
+            config = prepareSourceConfig,
+        )
+    }
 
     @BeforeEach
     fun setUp() {
@@ -405,6 +412,69 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                     /**
                      * test target fun
                      */
+                    fun targetFunction() {
+                        -GENERATE_HERE-
+                    }
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on target fun if isAddTestCommentsBeforeGeneration disabled and toggled in config, print target function with tests comments`() {
+        every { settings.isAddTestCommentsBeforeGeneration } returns false
+        prepareSourceConfig = PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig(
+            isInverseAddTestCommentsBeforeGenerationSetting = true,
+        )
+
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = baseCommonCaseFixtureBuilder(),
+            buildContext = {
+                setUsedClasses(getClass("project.TargetClass"))
+                setTargetFunction(getClassFunction("project.TargetClass.targetFunction"))
+                setUsedReferences(getClassFunction("project.TargetClass.targetFunction"))
+                setTests(
+                    getClass("project.TestClass") to listOf(
+                        getClassFunction("project.TestClass.test target fun"),
+                    )
+                )
+            },
+            expectedOutput = """
+                class TargetClass {
+                
+                    /**
+                     * test target fun
+                     */
+                    fun targetFunction() {
+                        -GENERATE_HERE-
+                    }
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on target fun if isAddTestCommentsBeforeGeneration enabled and toggled in config, print target function without test comments`() {
+        every { settings.isAddTestCommentsBeforeGeneration } returns true
+        prepareSourceConfig = PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig(
+            isInverseAddTestCommentsBeforeGenerationSetting = true,
+        )
+
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = baseCommonCaseFixtureBuilder(),
+            buildContext = {
+                setUsedClasses(getClass("project.TargetClass"))
+                setTargetFunction(getClassFunction("project.TargetClass.targetFunction"))
+                setUsedReferences(getClassFunction("project.TargetClass.targetFunction"))
+                setTests(
+                    getClass("project.TestClass") to listOf(
+                        getClassFunction("project.TestClass.test target fun"),
+                    )
+                )
+            },
+            expectedOutput = """
+                class TargetClass {
+                
                     fun targetFunction() {
                         -GENERATE_HERE-
                     }
