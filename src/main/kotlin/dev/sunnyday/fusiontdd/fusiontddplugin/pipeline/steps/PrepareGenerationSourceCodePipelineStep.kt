@@ -167,10 +167,10 @@ internal class PrepareGenerationSourceCodePipelineStep(
             }
 
             else -> {
-                if (declaration == input.targetFunction) {
-                    printTargetFunction(input.targetFunction, input)
-                } else {
-                    printFilterableElement(declaration, input)
+                when {
+                    declaration == input.targetFunction -> printTargetFunction(input.targetFunction, input)
+                    declaration is KtNamedFunction && !declaration.hasBody() -> printNoBodyFunction(declaration)
+                    else -> printFilterableElement(declaration, input)
                 }
             }
         }
@@ -251,6 +251,11 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
         append(functionElement.rBrace?.getPreviousWhiteSpaceIndent().orEmpty())
         appendLine(functionElement.rBrace?.text.orEmpty())
+    }
+
+    private fun StringBuilder.printNoBodyFunction(function: KtNamedFunction) {
+        append("abstract ")
+        appendLine(function.text)
     }
 
     private fun StringBuilder.printFilterableElement(
