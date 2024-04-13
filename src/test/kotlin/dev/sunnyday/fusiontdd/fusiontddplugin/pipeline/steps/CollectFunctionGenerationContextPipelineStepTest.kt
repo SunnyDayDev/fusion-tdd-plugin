@@ -34,6 +34,8 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     // endregion
 
+    // region Specification
+
     // region Unspecified / Other
 
     @Test
@@ -155,16 +157,6 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
                     getClassFunction("project.Target.callerFun"),
                     getClassFunction("project.Target.chainedFun"),
                 )
-        }
-    )
-
-    @Test
-    fun `on chained target fun, don't collect funs that called from target fun`() = executeCollectContextTest(
-        prepareProject = { copyDirToProject("collect/chain/simple") },
-        createStep = { createPipelineStep(targetFunction = "project.Target.callerFun") },
-        assertStepResult = { context ->
-            assertThat(context.usedReferences)
-                .doesNotContain(getClassFunction("project.Target.chainedFun"))
         }
     )
 
@@ -512,6 +504,45 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
             )
         }
     )
+
+    // endregion
+
+    // region Mention in target
+
+    @Test
+    fun `on met abstract fun reference in target function, collect it as used reference`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/usage_in_target/usage") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.targetFun") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.Target.usedAbstractFun"),
+            )
+        }
+    )
+
+    @Test
+    fun `on met fun reference in target function, collect it as used reference`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/usage_in_target/usage") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.targetFun") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassFunction("project.Target.usedFun"),
+            )
+        }
+    )
+
+    @Test
+    fun `on class reference in target function return, collect it as used reference`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/usage_in_target/return") },
+        createStep = { createPipelineStep(targetFunction = "project.Target.returnLibClass") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassOrObject("lib.LibClass"),
+            )
+        }
+    )
+
+    // endregion
 
     // endregion
 
