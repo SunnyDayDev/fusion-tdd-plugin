@@ -357,6 +357,33 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     )
 
+    @Test
+    fun `on implementation fun called, mark supertype fun as used`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/inheritance/common") },
+        createStep = { createPipelineStep(targetFunction = "project.Child.callInterfaceInTest") },
+        assertStepResult = { context ->
+            val callInterfaceWithoutArg = getClass("project.ExternalInterface").declarations[1]
+            val callInterfaceWithArg = getClass("project.ExternalInterface").declarations[2]
+
+            assertThat(callInterfaceWithArg.text).isEqualTo("fun callInterface(intArg: Int)")
+            assertThat(callInterfaceWithoutArg.text).isEqualTo("fun callInterface()")
+
+            assertThat(context.usedReferences).contains(callInterfaceWithArg)
+            assertThat(context.usedReferences).doesNotContain(callInterfaceWithoutArg)
+        }
+    )
+
+    @Test
+    fun `on implementation var called, mark supertype var as used`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/inheritance/common") },
+        createStep = { createPipelineStep(targetFunction = "project.Child.callInterfaceInTest") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).contains(
+                getClassProperty("project.ExternalInterface.interfaceVar"),
+            )
+        }
+    )
+
     // endregion
 
     // region Filter inaccessible test

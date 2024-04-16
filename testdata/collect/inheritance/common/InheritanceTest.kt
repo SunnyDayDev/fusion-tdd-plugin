@@ -51,4 +51,12 @@ class InheritanceTest {
         otherParent.callParent()
         otherInterface.callInterface()
     }
+
+    @Test
+    fun `test child_callInterfaceInTest()`() {
+        child.interfaceVar = 1
+        child.callInterface(intArg: 2)
+
+        child.callInterfaceInTest()
+    }
 }
