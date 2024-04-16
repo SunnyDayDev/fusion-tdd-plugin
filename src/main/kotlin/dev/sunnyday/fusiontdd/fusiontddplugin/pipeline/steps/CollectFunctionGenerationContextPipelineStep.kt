@@ -345,7 +345,7 @@ private class CollectFunctionGenerationContextPipelineTask(
     }
 
     private fun collectWhenCaseEntryRequiredClassOrObjectsWithNegotiation(
-        whenEntry: KtWhenEntry
+        whenEntry: KtWhenEntry,
     ): ParameterRequirement.AnyOf? {
         val typeRequirements = whenEntry.conditions.map { condition ->
             val typeRequirement = when (condition) {
@@ -368,7 +368,7 @@ private class CollectFunctionGenerationContextPipelineTask(
     }
 
     private fun getKtWhenConditionWithExpressionTypeRequirement(
-        condition: KtWhenConditionWithExpression
+        condition: KtWhenConditionWithExpression,
     ): TypeRequirement? {
         var expression = condition.expression
         while (expression is KtDotQualifiedExpression) {
@@ -385,7 +385,7 @@ private class CollectFunctionGenerationContextPipelineTask(
 
     private fun checkIsTestFitCallChainRequirements(
         function: KtNamedFunction,
-        resolvedParameters: Map<KtParameter, KtClassOrObject?> = emptyMap()
+        resolvedParameters: Map<KtParameter, KtClassOrObject?> = emptyMap(),
     ): Boolean {
         if (!checkPassRequirements(function, resolvedParameters)) {
             return false
@@ -721,11 +721,11 @@ private class CollectFunctionGenerationContextPipelineTask(
         private fun onDeclarationReference(reference: KtDeclaration) {
             if (
                 (reference.context is KtClassBody || reference.context is KtFile) &&
-                reference !in usedReferences &&
                 addUniqueUsedReferenceToCollector(reference)
             ) {
                 if (reference.isScannable()) {
                     addDeclarationOwnersClassesToReferenced(reference)
+                    addDeclarationSupertypeUsagesToReferenced(reference)
 
                     collectReferencesQueue.addFirst(reference)
                 }
@@ -740,6 +740,42 @@ private class CollectFunctionGenerationContextPipelineTask(
             }
 
             referencedClassesCollector.add(classOrObject)
+        }
+
+        private fun addDeclarationSupertypeUsagesToReferenced(reference: KtDeclaration) {
+            if (reference !is KtNamedFunction && reference !is KtProperty) {
+                return
+            }
+
+            val classOrObject = reference.parentOfType<KtClassOrObject>(withSelf = false) ?: return
+            iterateOverSuperTypes(classOrObject) { superClass ->
+                val usedSuperTypeReference = superClass.declarations.firstOrNull { declaration ->
+                    when {
+                        reference is KtNamedFunction && declaration is KtNamedFunction &&
+                                reference.name == declaration.name &&
+                                reference.valueParameterList?.text == declaration.valueParameterList?.text -> true
+
+                        reference is KtProperty && declaration is KtProperty &&
+                                reference.name == declaration.name -> true
+
+                        else -> false
+                    }
+                } ?: return@iterateOverSuperTypes
+
+                addUniqueUsedReferenceToCollector(usedSuperTypeReference)
+            }
+        }
+
+        private inline fun iterateOverSuperTypes(classOrObject: KtClassOrObject, action: (superClass: KtClass) -> Unit) {
+            val queue = ArrayDeque<KtSuperTypeListEntry>()
+            queue.addAll(classOrObject.superTypeListEntries)
+
+            while (queue.isNotEmpty()) {
+                val superTypeEntry = queue.removeFirst()
+                val klass: KtClass = superTypeEntry.resolveClass() ?: continue
+                queue.addAll(klass.superTypeListEntries)
+                action.invoke(klass)
+            }
         }
 
         override fun elementFinished(element: PsiElement?) {

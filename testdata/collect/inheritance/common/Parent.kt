@@ -7,5 +7,9 @@ abstract class Parent {
 
 interface ExternalInterface {
 
+    var interfaceVar: Int
+
     fun callInterface()
+
+    fun callInterface(intArg: Int)
 }
