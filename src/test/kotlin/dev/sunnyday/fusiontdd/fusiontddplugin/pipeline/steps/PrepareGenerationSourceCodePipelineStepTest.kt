@@ -47,11 +47,79 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
     // endregion
 
+    // region Files
+
+    @Test
+    fun `print target generation class as last`() {
+        executePrepareGenerationSourceCodeTest(
+            excludeFilePathAndPackage = false,
+            prepareFixture = {
+                addFileToProject(
+                    "A.kt", """
+                        class A
+                    """.trimIndent()
+                )
+                addFileToProject(
+                    "B.kt", """
+                        class B0
+                        
+                        class B1 {
+                            fun target() {
+                                
+                            }
+                        }
+
+                        class B2
+                    """.trimIndent()
+                )
+                addFileToProject(
+                    "C.kt", """
+                        class C
+                    """.trimIndent()
+                )
+            },
+            buildContext = {
+                setTargetFunction(getClassFunction("B1.target"))
+                setUsedClasses(getClass("A"), getClass("B0"), getClass("B1"), getClass("B2"), getClass("C"))
+                setUsedReferences(
+                    getClass("A"),
+                    getClass("B0"),
+                    getClass("B1"),
+                    getClass("B2"),
+                    getClass("C"),
+                    getClassFunction("B1.target"),
+                )
+            },
+            expectedOutput = """
+                // file: src/A.kt
+                class A
+                
+                // file: src/C.kt
+                class C
+                
+                // file: src/B.kt
+                class B0
+                
+                class B2
+                
+                class B1 {
+                
+                    fun target() {
+                    -GENERATE_HERE-
+                    }
+                }
+            """.trimIndent(),
+        )
+    }
+
+    // endregion
+
     // region Imports
 
     @Test
     fun `on import, keep only imports of referenced classes`() {
         executePrepareGenerationSourceCodeTest(
+            excludeFilePathAndPackage = false,
             prepareFixture = baseCommonCaseFixtureBuilder(),
             buildContext = {
                 setUsedClasses(getClass("project.Class1"), getClass("project.Class2"))
@@ -61,11 +129,17 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                 )
             },
             expectedOutput = """
-                import other.ref.UsedDep1
-                import other.ref.UsedDep2
+                // file: src/print/Class1.kt
+                package project
                 
+                import other.ref.UsedDep1
                 
                 class Class1
+                
+                // file: src/print/Class2.kt
+                package project
+                
+                import other.ref.UsedDep2
                 
                 class Class2
             """.trimIndent(),
@@ -924,7 +998,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
     private fun simpleClassContextBuilder(
         className: String,
         vararg usedFunctions: String = emptyArray(),
-        buildContext: FunctionContextBuilder.(klass: KtClass) -> Unit = {}
+        buildContext: FunctionContextBuilder.(klass: KtClass) -> Unit = {},
     ): FunctionContextBuilder.(fixture: JavaCodeInsightTestFixture) -> Unit {
         return {
             val klass = getClass(className)
@@ -938,7 +1012,8 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
     private fun executePrepareGenerationSourceCodeTest(
         prepareFixture: JavaCodeInsightTestFixture.() -> Unit = {},
         buildContext: FunctionContextBuilder.(fixture: JavaCodeInsightTestFixture) -> Unit = {},
-        expectedOutput: String
+        excludeFilePathAndPackage: Boolean = true,
+        expectedOutput: String,
     ) {
         runInEdtAndWait { prepareFixture.invoke(fixture) }
 
@@ -986,7 +1061,17 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
         val result = runReadAction { step.executeAndWait(functionContext) }
 
-        assertThat(result.getOrThrow().rawText).isEqualTo(expectedOutput)
+        val resultCodeBlockText = result.getOrThrow().rawText.let { text ->
+            if (excludeFilePathAndPackage) {
+                val lines = text.lines()
+                val hasPackage = lines.getOrNull(1).orEmpty().startsWith("package ")
+                lines.drop(if (hasPackage) 3 else 1)
+                    .joinToString(separator = "\n")
+            } else {
+                text
+            }
+        }
+        assertThat(resultCodeBlockText).isEqualTo(expectedOutput)
     }
 
     private interface FunctionContextBuilder : JavaCodeInsightTestFixture {
