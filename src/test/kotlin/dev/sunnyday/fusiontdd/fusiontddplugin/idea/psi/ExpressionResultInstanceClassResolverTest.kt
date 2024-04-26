@@ -7,6 +7,8 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClass
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClassFunction
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.getClassProperty
 import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtIfExpression
+import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.junit.jupiter.api.Test
 
 class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTestCase5() {
@@ -21,6 +23,8 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
 
     // region Specifications (Tests)
 
+    // region Instantiating class
+
     @Test
     fun `on property reference, resolve with referenced property instance`() = runInEdtAndWait {
         val expression = prepareExpression(
@@ -30,7 +34,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Independent"))
     }
@@ -46,7 +50,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Independent"))
     }
@@ -62,7 +66,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Independent"))
     }
@@ -78,7 +82,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Independent"))
     }
@@ -92,7 +96,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Independent"))
     }
@@ -106,7 +110,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Parent.DotChild.Deeper"))
     }
@@ -121,7 +125,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Child"))
     }
@@ -136,7 +140,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Values.Some"))
     }
@@ -151,7 +155,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Values.Some2"))
     }
@@ -166,7 +170,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Child"))
     }
@@ -181,31 +185,9 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("OtherChild"))
-    }
-
-    @Test
-    fun `on parameter with function scope, return parameter`() = runInEdtAndWait {
-        val expression = prepareExpression(
-            expression = "calculate",
-            expressionBody = """
-            fun calculate(arg: Parent = OtherChild()): Any {
-                return arg
-            }
-            """.trimIndent()
-        )
-        val scopeFunction = fixture.getClassFunction("Expression.calculate")
-
-        val resolvedExpression = resolver.resolveExpression(
-            expression = expression,
-            stopConditions = listOf(
-                ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(scopeFunction),
-            ),
-        )
-
-        assertThat(resolvedExpression).isEqualTo(scopeFunction.valueParameters[0])
     }
 
     @Test
@@ -220,7 +202,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
         )
         val scopeFunction = fixture.getClassFunction("Expression.calculate")
 
-        val resolvedExpression = resolver.resolveClass(
+        val resolvedExpression = resolver.resolveInstantiatingClass(
             expression = expression,
             stopConditions = listOf(
                 ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(scopeFunction),
@@ -239,7 +221,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Parent"))
     }
@@ -257,7 +239,7 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Root"))
     }
@@ -273,10 +255,107 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             """.trimIndent()
         )
 
-        val resolvedClass = resolver.resolveClass(expression)
+        val resolvedClass = resolver.resolveInstantiatingClass(expression)
 
         assertThat(resolvedClass).isEqualTo(fixture.getClass("Independent"))
     }
+
+    // endregion
+
+    // region Instantiating expression
+
+    @Test
+    fun `on parameter with function scope, return parameter`() = runInEdtAndWait {
+        val expression = prepareExpression(
+            expression = "calculate",
+            expressionBody = """
+            fun calculate(arg: Parent = OtherChild()): Any {
+                return arg
+            }
+            """.trimIndent()
+        )
+        val scopeFunction = fixture.getClassFunction("Expression.calculate")
+
+        val resolvedExpression = resolver.resolveInstantiationExpression(
+            expression = expression,
+            stopConditions = listOf(
+                ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(scopeFunction),
+            ),
+        )
+
+        assertThat(resolvedExpression).isEqualTo(scopeFunction.valueParameters[0])
+    }
+
+    @Test
+    fun `on resolve expression of constructor call, if skipped (empty no args constructor), return class`() = runInEdtAndWait {
+        val expression = prepareExpression(
+            expression = "delegated",
+            expressionBody = """
+            val delegated = Independent()
+            """.trimIndent()
+        )
+
+        val resolvedExpression = resolver.resolveInstantiationExpression(expression)
+
+        assertThat(resolvedExpression).isEqualTo(fixture.getClass("Independent"))
+    }
+
+    @Test
+    fun `on resolve expression of constructor call, return constructor`() = runInEdtAndWait {
+        val expression = prepareExpression(
+            expression = "delegated",
+            expressionBody = """
+            val delegated = WithConstructor()
+            """.trimIndent()
+        )
+
+        val resolvedExpression = resolver.resolveInstantiationExpression(expression)
+
+        assertThat(resolvedExpression).isEqualTo(fixture.getClass("WithConstructor").primaryConstructor)
+    }
+
+    @Test
+    fun `on resolve expression of constructor call, if secondary called, return secondary constructor`() = runInEdtAndWait {
+        val expression = prepareExpression(
+            expression = "delegated",
+            expressionBody = """
+            val delegated = WithConstructor(1)
+            """.trimIndent()
+        )
+
+        val resolvedExpression = resolver.resolveInstantiationExpression(expression)
+
+        assertThat(resolvedExpression).isEqualTo(fixture.getClass("WithConstructor").secondaryConstructors[0])
+    }
+
+    @Test
+    fun `on resolve expression of if operator, return if expression`() = runInEdtAndWait {
+        val expression = prepareExpression(
+            expression = "delegated",
+            expressionBody = """
+            val delegated = if (true) 1 else 2
+            """.trimIndent()
+        )
+
+        val resolvedExpression = resolver.resolveInstantiationExpression(expression)
+
+        assertThat(resolvedExpression).isInstanceOf(KtIfExpression::class.java)
+    }
+
+    @Test
+    fun `on resolve expression of when operator, return when expression`() = runInEdtAndWait {
+        val expression = prepareExpression(
+            expression = "delegated",
+            expressionBody = """
+            val delegated = when { true -> 1; false -> 2; else -> 3 }
+            """.trimIndent()
+        )
+        val resolvedExpression = resolver.resolveInstantiationExpression(expression)
+
+        assertThat(resolvedExpression).isInstanceOf(KtWhenExpression::class.java)
+    }
+
+    // endregion
 
     // endregion
 
@@ -297,6 +376,10 @@ class ExpressionResultInstanceClassResolverTest : LightJavaCodeInsightFixtureTes
             class OtherChild : Parent()
             
             class Independent : Root()
+            
+            class WithConstructor() : Root() {
+                constructor(value: Int) : this()
+            }
             
             sealed class Values : Root() {
                 data class Some(val value: Int) : Values

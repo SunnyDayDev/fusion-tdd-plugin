@@ -384,6 +384,17 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         }
     )
 
+    @Test
+    fun `when collect implemented interface usages, collect only usages where the interface can be a target instance`() = executeCollectContextTest(
+        prepareProject = { copyDirToProject("collect/inheritance/mock_in_other_test") },
+        createStep = { createPipelineStep(targetFunction = "project.target.Target.targetFun") },
+        assertStepResult = { context ->
+            assertThat(context.usedReferences).doesNotContain(
+                getClassFunction("project.client.TargetClientTest.test_doSome"),
+            )
+        }
+    )
+
     // endregion
 
     // region Filter inaccessible test
