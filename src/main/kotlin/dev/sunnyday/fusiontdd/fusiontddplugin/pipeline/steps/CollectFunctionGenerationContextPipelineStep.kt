@@ -19,7 +19,6 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
 import org.jetbrains.kotlin.idea.base.searching.usages.KotlinFindUsagesHandlerFactory
-import org.jetbrains.kotlin.idea.base.searching.usages.KotlinFunctionFindUsagesOptions
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClass
@@ -73,6 +72,12 @@ private class CollectFunctionGenerationContextPipelineTask(
 
     private val receiverInstanceClassResolver = ExpressionResultInstanceClassResolver()
 
+    private val findFunctionUsagesFactory = KotlinFindUsagesHandlerFactory(targetFunction.project)
+        .apply {
+            findFunctionOptions.searchOverrides = true
+            findClassOptions.isMethodsUsages = true
+        }
+
     fun execute(): FunctionGenerationContext {
         ProgressManager.getInstance().runProcess(
             /* process = */ Computable(::collectTestsWithBranchPointMarking),
@@ -105,8 +110,8 @@ private class CollectFunctionGenerationContextPipelineTask(
         }
 
         while (queue.isNotEmpty()) {
-            val (function, functionClass) = queue.removeFirst()
-            val usages = findUsages(function, functionClass)
+            val (function, functionImplementerClass) = queue.removeFirst()
+            val usages = findUsages(function, functionImplementerClass)
             usages.forEach { usage -> usageToFunction[usage.element] = function }
             proceedUsages(usages, queue, visited)
         }
@@ -171,37 +176,35 @@ private class CollectFunctionGenerationContextPipelineTask(
     private fun findAnyUsages(function: KtNamedFunction): Collection<UsageInfo> {
         val collectProcessor = CommonProcessors.CollectProcessor<UsageInfo>()
 
-        KotlinFindUsagesHandlerFactory(function.project)
-            .createFindUsagesHandler(function, false)
+        findFunctionUsagesFactory.createFindUsagesHandler(function, false)
             .processElementUsages(
                 /* element = */ function,
                 /* processor = */ collectProcessor,
-                /* options = */
-                KotlinFunctionFindUsagesOptions(function.project).apply {
-                    searchOverrides = false
-                },
+                /* options = */ findFunctionUsagesFactory.findFunctionOptions,
             )
 
         return collectProcessor.results
     }
 
-    private fun isPossibleUsage(usageInfo: UsageInfo, functionClass: KtClass?): Boolean {
-        if (functionClass == null) return true
+    private fun isPossibleUsage(usageInfo: UsageInfo, functionImplementerClass: KtClass?): Boolean {
+        if (functionImplementerClass == null) return true
 
         val receiverClass = getUsageReceiverClass(usageInfo)
-        return receiverClass == null ||
-                receiverClass === functionClass ||
-                getSuperClasses(receiverClass).contains(functionClass)
+
+        return receiverClass === functionImplementerClass ||
+                receiverClass != null && getSuperClasses(receiverClass).contains(functionImplementerClass)
     }
 
     // TODO: getUsageReceiverClass, other usage cases (not only KtDotQualifiedExpression)
     private fun getUsageReceiverClass(usageInfo: UsageInfo): KtClassOrObject? {
-        val usageElementContext = usageInfo.element?.context
+        val usageCall = usageInfo.element ?: return null
+
+        val usageElementContext = usageCall.context
 
         return when (val usageContext = usageElementContext?.context) {
             is KtDotQualifiedExpression -> {
-                val usageFunctionScope = usageInfo.element?.parentOfType<KtNamedFunction>()
-                receiverInstanceClassResolver.resolveClass(
+                val usageFunctionScope = usageCall.parentOfType<KtNamedFunction>()
+                receiverInstanceClassResolver.resolveInstantiatingClass(
                     expression = usageContext.receiverExpression,
                     stopConditions = usageFunctionScope?.let { scopeFunction ->
                         listOf(
@@ -211,7 +214,10 @@ private class CollectFunctionGenerationContextPipelineTask(
                 )
             }
 
-            else -> null
+            else -> {
+                val calledFunImplementation = (usageCall as? KtNameReferenceExpression)?.mainReference?.resolve() as? KtNamedFunction
+                calledFunImplementation?.containingClass()
+            }
         }
     }
 
@@ -224,14 +230,14 @@ private class CollectFunctionGenerationContextPipelineTask(
             val usageOwnerFunction = walkUpToCallerFunctionWithBranchPointMarking(usage.element)
                 ?: return@forEachUsage
 
-            getFunctionWithOverrides(usageOwnerFunction).forEach { function ->
-                if (visited.add(function)) {
-                    queue.addFirst(function to function.containingClass())
+            getFunctionWithOverrides(usageOwnerFunction).forEach { functionImplementerClass ->
+                if (visited.add(functionImplementerClass)) {
+                    queue.addFirst(functionImplementerClass to functionImplementerClass.containingClass())
 
-                    if (hasTestAnnotation(function)) {
-                        function.containingClass()?.let { testClass ->
-                            if (checkIsTestFitCallChainRequirements(function)) {
-                                tests.getOrPut(testClass, ::mutableListOf).add(function)
+                    if (hasTestAnnotation(functionImplementerClass)) {
+                        functionImplementerClass.containingClass()?.let { testClass ->
+                            if (checkIsTestFitCallChainRequirements(functionImplementerClass)) {
+                                tests.getOrPut(testClass, ::mutableListOf).add(functionImplementerClass)
                             }
                         }
                     }
@@ -273,7 +279,7 @@ private class CollectFunctionGenerationContextPipelineTask(
 
     private fun addRequirementIfHas(whenExpression: KtWhenExpression, whenEntry: KtWhenEntry) {
         val whenFunctionScope = whenExpression.parentOfType<KtNamedFunction>() ?: return
-        val usedInWhenParameter = receiverInstanceClassResolver.resolveExpression(
+        val usedInWhenParameter = receiverInstanceClassResolver.resolveInstantiationExpression(
             expression = whenExpression.subjectExpression,
             stopConditions = listOf(
                 ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(whenFunctionScope),
@@ -509,7 +515,7 @@ private class CollectFunctionGenerationContextPipelineTask(
 
             val parameterExpression = argument?.getArgumentExpression() ?: parameter.defaultValue
 
-            receiverInstanceClassResolver.resolveClass(
+            receiverInstanceClassResolver.resolveInstantiatingClass(
                 expression = parameterExpression,
                 stopConditions = listOf(
                     ExpressionResultInstanceClassResolver.StopCondition.FunctionParameter(function),

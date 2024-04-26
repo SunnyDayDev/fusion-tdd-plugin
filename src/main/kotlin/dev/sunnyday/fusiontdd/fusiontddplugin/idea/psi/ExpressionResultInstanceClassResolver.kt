@@ -13,7 +13,7 @@ internal class ExpressionResultInstanceClassResolver {
     private var stopConditions: List<StopCondition> = emptyList()
     private var knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap()
 
-    fun resolveClass(
+    fun resolveInstantiatingClass(
         expression: KtExpression?,
         stopConditions: List<StopCondition>? = null,
         knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap(),
@@ -23,7 +23,7 @@ internal class ExpressionResultInstanceClassResolver {
         }
     }
 
-    fun resolveExpression(
+    fun resolveInstantiationExpression(
         expression: KtExpression?,
         stopConditions: List<StopCondition>? = null,
         knownResolutions: Map<out KtExpression, KtExpression?> = emptyMap(),
@@ -36,7 +36,7 @@ internal class ExpressionResultInstanceClassResolver {
     private inline fun <T> withScope(
         stopConditions: List<StopCondition>? = null,
         resolutions: Map<out KtExpression, KtExpression?>,
-        action: () -> T
+        action: () -> T,
     ): T {
         this.stopConditions = stopConditions ?: emptyList()
         knownResolutions = resolutions
@@ -54,6 +54,7 @@ internal class ExpressionResultInstanceClassResolver {
             null -> null
 
             is KtClassOrObject -> expression
+            is KtConstructor<*> -> expression.getContainingClassOrObject()
             is KtIfExpression -> resolveIfExpression(expression)
             is KtWhenExpression -> resolveWhenExpression(expression)
 
@@ -73,10 +74,13 @@ internal class ExpressionResultInstanceClassResolver {
     private fun internalResolveExpression(expression: KtExpression?): KtExpression? {
         return when (expression) {
             null -> null
-            is KtClassOrObject -> return expression
+
+            is KtClassOrObject,
+            is KtConstructor<*>,
+            is KtWhenExpression,
+            is KtIfExpression -> return expression
 
             is KtProperty -> resolveReferencedPropertyExpression(expression)
-            is KtConstructor<*> -> internalResolveExpression(expression.getContainingClassOrObject())
             is KtFunction -> internalResolveExpression(expression.bodyExpression)
             is KtParameter -> resolveParameterReference(expression)
 
