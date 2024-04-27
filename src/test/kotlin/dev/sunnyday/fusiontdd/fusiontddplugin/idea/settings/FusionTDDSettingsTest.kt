@@ -1,24 +1,11 @@
 package dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings
 
 import com.google.common.truth.Truth.assertThat
-import com.intellij.mock.MockApplication
-import com.intellij.openapi.Disposable
-import com.intellij.openapi.application.ApplicationManager
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 
 class FusionTDDSettingsTest {
-
-    private val testDisposable = object : Disposable.Default {}
-    private val application = MockApplication(testDisposable)
-
-    @BeforeEach
-    fun setUp() {
-        ApplicationManager.setApplication(application, testDisposable)
-    }
 
     @Test
     fun `provide authToken by state`() = testTDDSettings(
@@ -115,10 +102,5 @@ class FusionTDDSettingsTest {
         settings.loadState(state)
 
         settings.assert()
-    }
-
-    @AfterEach
-    fun tearDown() {
-        testDisposable.dispose()
     }
 }
