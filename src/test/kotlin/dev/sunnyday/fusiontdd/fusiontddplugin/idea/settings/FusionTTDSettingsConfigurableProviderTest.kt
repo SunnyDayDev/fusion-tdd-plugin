@@ -9,9 +9,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import javax.swing.JCheckBox
 import javax.swing.JSlider
-import javax.swing.JTextField
+import javax.swing.JToggleButton
+import javax.swing.text.JTextComponent
 
 class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTestCase5() {
 
@@ -29,7 +29,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.authToken } returns "abx34"
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JTextField>(settings::authToken.name)
+            .requireChildByName<JTextComponent>(settings::authToken.name)
 
         assertThat(checkBox.text).isEqualTo("abx34")
 
@@ -44,7 +44,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.projectPackage } returns "initial"
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JTextField>(settings::projectPackage.name)
+            .requireChildByName<JTextComponent>(settings::projectPackage.name)
 
         assertThat(checkBox.text).isEqualTo("initial")
 
@@ -59,7 +59,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.starcoderModel } returns "some"
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JTextField>(settings::starcoderModel.name)
+            .requireChildByName<JTextComponent>(settings::starcoderModel.name)
 
         assertThat(checkBox.text).isEqualTo("some")
 
@@ -89,7 +89,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.starcoderTemperature } returns 3f
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JTextField>(settings::starcoderTemperature.name)
+            .requireChildByName<JTextComponent>(settings::starcoderTemperature.name)
 
         assertThat(checkBox.text).isEqualTo("3")
 
@@ -104,7 +104,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.starcoderDoSample } returns true
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JCheckBox>(settings::starcoderDoSample.name)
+            .requireChildByName<JToggleButton>(settings::starcoderDoSample.name)
 
         assertThat(checkBox.isSelected).isTrue()
 
@@ -119,7 +119,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.starcoderUseCache } returns true
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JCheckBox>(settings::starcoderUseCache.name)
+            .requireChildByName<JToggleButton>(settings::starcoderUseCache.name)
 
         assertThat(checkBox.isSelected).isTrue()
 
@@ -134,7 +134,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.isAddTestCommentsBeforeGeneration } returns true
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JCheckBox>(settings::isAddTestCommentsBeforeGeneration.name)
+            .requireChildByName<JToggleButton>(settings::isAddTestCommentsBeforeGeneration.name)
 
         assertThat(checkBox.isSelected).isTrue()
 
@@ -149,7 +149,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.isConfirmSourceBeforeGeneration } returns true
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JCheckBox>(settings::isConfirmSourceBeforeGeneration.name)
+            .requireChildByName<JToggleButton>(settings::isConfirmSourceBeforeGeneration.name)
 
         assertThat(checkBox.isSelected).isTrue()
 
@@ -164,7 +164,7 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         every { settings.isFixApplyGenerationResultError } returns true
         val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
         val checkBox = requireNotNull(configurableSettings.createComponent())
-            .requireChildByName<JCheckBox>(settings::isFixApplyGenerationResultError.name)
+            .requireChildByName<JToggleButton>(settings::isFixApplyGenerationResultError.name)
 
         assertThat(checkBox.isSelected).isTrue()
 
@@ -172,5 +172,35 @@ class FusionTTDSettingsConfigurableProviderTest : LightJavaCodeInsightFixtureTes
         configurableSettings.apply()
 
         verify { settings.isFixApplyGenerationResultError = false }
+    }
+
+    @Test
+    fun `global additional prompt field is present on settings`() {
+        every { settings.globalAdditionalPrompt } returns "globalAdditionalPrompt"
+        val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
+        val textField = requireNotNull(configurableSettings.createComponent())
+            .requireChildByName<JTextComponent>(settings::globalAdditionalPrompt.name)
+
+        assertThat(textField.text).isEqualTo("globalAdditionalPrompt")
+
+        textField.text = "changed"
+        configurableSettings.apply()
+
+        verify { settings.globalAdditionalPrompt = "changed" }
+    }
+
+    @Test
+    fun `generation additional prompt field is present on settings`() {
+        every { settings.generationTargetAdditionalPrompt } returns "generationTargetAdditionalPrompt"
+        val configurableSettings = FusionTTDSettingsConfigurableProvider(fixture.project).createConfigurable()
+        val textField = requireNotNull(configurableSettings.createComponent())
+            .requireChildByName<JTextComponent>(settings::generationTargetAdditionalPrompt.name)
+
+        assertThat(textField.text).isEqualTo("generationTargetAdditionalPrompt")
+
+        textField.text = "changed"
+        configurableSettings.apply()
+
+        verify { settings.generationTargetAdditionalPrompt = "changed" }
     }
 }

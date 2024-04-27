@@ -55,9 +55,13 @@ internal class PrepareGenerationSourceCodePipelineStep(
                 }
             }
 
+        private val isAddAdditionalComments: Boolean
+            get() = isAddTestCommentsBeforeGeneration || settings.generationTargetAdditionalPrompt.orEmpty().isNotBlank()
+
         fun getGenerationSource(): CodeBlock {
             val generationSourceString = buildString {
                 printUsedClasses()
+                printGlobalAdditionalPrompt()
             }
 
             return CodeBlock(generationSourceString)
@@ -256,7 +260,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
 
         private fun StringBuilder.printTargetFunction(targetFunction: KtFunction) {
-            var isTestCommentsAdded = !isAddTestCommentsBeforeGeneration
+            var isTestCommentsAdded = !isAddAdditionalComments
             var functionElement = targetFunction.firstChild
 
             while (functionElement != null && functionElement.nextSibling != null) {
@@ -280,24 +284,37 @@ internal class PrepareGenerationSourceCodePipelineStep(
             val isFirstFunDeclarationElement = functionElement is KtModifierList ||
                     functionElement.tokenType == KtTokens.FUN_KEYWORD
 
-            return if (isFirstFunDeclarationElement && isAddTestCommentsBeforeGeneration) {
-                printTargetFunctionTestComments(functionElement)
+            return if (isFirstFunDeclarationElement && isAddAdditionalComments) {
+                printTargetFunctionAdditionalComments(functionElement)
                 true
             } else {
                 false
             }
         }
 
-        private fun StringBuilder.printTargetFunctionTestComments(
+        private fun StringBuilder.printTargetFunctionAdditionalComments(
             firstFunDeclarationElement: PsiElement,
         ) {
             val functionIndentWhiteSpace = input.targetFunction?.getPreviousWhiteSpaceIndent().orEmpty()
 
-            val testTitles = input.tests.values
-                .flatten()
-                .mapNotNull(KtNamedFunction::getName)
+            val additionalCommentLines = mutableListOf<String>()
 
-            if (testTitles.isNotEmpty()) {
+            if (isAddTestCommentsBeforeGeneration) {
+                input.tests.values
+                    .flatten()
+                    .mapNotNullTo(additionalCommentLines, KtNamedFunction::getName)
+            }
+
+            val additionalPrompt = settings.generationTargetAdditionalPrompt.orEmpty()
+            if (additionalPrompt.isNotBlank()) {
+                if (additionalCommentLines.isNotEmpty()) {
+                    additionalCommentLines.add("")
+                }
+
+                additionalCommentLines.addAll(additionalPrompt.lines())
+            }
+
+            if (additionalCommentLines.isNotEmpty()) {
                 if (firstFunDeclarationElement.prevSibling?.prevSibling is KDoc) {
                     deleteRange(lastIndexOf("/"), length)
                     appendLine()
@@ -305,7 +322,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
                     appendLine("/**")
                 }
 
-                testTitles.forEach { testTitle ->
+                additionalCommentLines.forEach { testTitle ->
                     append(functionIndentWhiteSpace)
                     append(" * ")
                     appendLine(testTitle)
@@ -347,6 +364,18 @@ internal class PrepareGenerationSourceCodePipelineStep(
         ) {
             filterableElement.accept(PrintFilterableElementVisitor(this, input))
             appendLine()
+        }
+
+        private fun StringBuilder.printGlobalAdditionalPrompt() {
+            if (settings.globalAdditionalPrompt.isNullOrBlank()) return
+
+            appendLine()
+            appendLine()
+
+            val globalComment = settings.globalAdditionalPrompt.orEmpty()
+                .lines()
+                .joinToString(separator = "\n") { "// $it" }
+            append(globalComment)
         }
 
         private class PrintFilterableElementVisitor(

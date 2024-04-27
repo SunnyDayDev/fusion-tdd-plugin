@@ -129,7 +129,9 @@ internal class FusionTTDSettingsConfigurable(
                         )
                         .bindSelected(settings::starcoderWaitForModel)
                 }
+            }
 
+            group("Prompts") {
                 row {
                     checkBox("Add tests comments before generation")
                         .applyToComponent { name = settings::isAddTestCommentsBeforeGeneration.name }
@@ -138,6 +140,30 @@ internal class FusionTTDSettingsConfigurable(
                                     "and places as a comment before the generating function.",
                         )
                         .bindSelected(settings::isAddTestCommentsBeforeGeneration)
+                }
+
+                row {
+                    textArea()
+                        .applyToComponent { name = settings::globalAdditionalPrompt.name }
+                        .label("Global additional prompt")
+                        .rows(3)
+                        .align(Align.FILL)
+                        .comment(
+                            comment = "This prompt will be added globally to the generation request.",
+                        )
+                        .bindText(settings::globalAdditionalPrompt.orEmpty(), settings::globalAdditionalPrompt::set)
+                }
+
+                row {
+                    textArea()
+                        .applyToComponent { name = settings::generationTargetAdditionalPrompt.name }
+                        .label("Generation target additional prompt")
+                        .rows(3)
+                        .align(Align.FILL)
+                        .comment(
+                            comment = "This prompt will as an additional comment to the generation target.",
+                        )
+                        .bindText(settings::generationTargetAdditionalPrompt.orEmpty(), settings::generationTargetAdditionalPrompt::set)
                 }
             }
 
