@@ -42,10 +42,14 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
         settings.apply {
             every { projectPackage } returns "project"
             every { isAddTestCommentsBeforeGeneration } returns false
+            every { globalAdditionalPrompt } returns null
+            every { generationTargetAdditionalPrompt } returns null
         }
     }
 
     // endregion
+
+    // region Specification
 
     // region Files
 
@@ -964,6 +968,60 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                     }
                 
                     private fun doElse() = Unit
+                }
+            """.trimIndent(),
+        )
+    }
+
+    // endregion
+
+    // endregion
+
+    // region Additional prompts
+
+    @Test
+    fun `on print, if has additional global prompt add it to end of the printed file`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = baseCommonCaseFixtureBuilder {
+                every { settings.globalAdditionalPrompt } returns """
+                    The first line of prompt,
+                    and the second.
+                """.trimIndent()
+            },
+            buildContext = simpleClassContextBuilder("project.Class1"),
+            expectedOutput = """
+                class Class1
+                
+                // The first line of prompt,
+                // and the second.
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on print, if has additional target generation prompt add it to end of the printed file`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = baseCommonCaseFixtureBuilder {
+                every { settings.generationTargetAdditionalPrompt } returns """
+                    The first line of prompt,
+                    and the second.
+                """.trimIndent()
+            },
+            buildContext = simpleClassContextBuilder("project.Class1") {
+                val targetFun = getClassFunction("project.Class1.doSomething")
+                setTargetFunction(targetFun)
+                setUsedReferences(targetFun)
+            },
+            expectedOutput = """
+                class Class1 {
+                
+                    /**
+                     * The first line of prompt,
+                     * and the second.
+                     */
+                    fun doSomething() {
+                        -GENERATE_HERE-
+                    }
                 }
             """.trimIndent(),
         )

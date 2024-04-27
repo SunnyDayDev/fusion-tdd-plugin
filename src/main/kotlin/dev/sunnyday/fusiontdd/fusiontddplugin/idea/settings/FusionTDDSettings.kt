@@ -28,6 +28,10 @@ internal class FusionTDDSettings : SimplePersistentStateComponent<FusionTDDSetti
     var isConfirmSourceBeforeGeneration by state::isConfirmSourceBeforeGeneration
 
     var isFixApplyGenerationResultError by state::isFixApplyGenerationResultError
+
+    var globalAdditionalPrompt by state::globalAdditionalPrompt
+
+    var generationTargetAdditionalPrompt by state::generationTargetAdditionalPrompt
 }
 
 internal class FusionTDDSettingsState : BaseState() {
@@ -53,4 +57,8 @@ internal class FusionTDDSettingsState : BaseState() {
     var isConfirmSourceBeforeGeneration by property(false)
 
     var isFixApplyGenerationResultError by property(true)
+
+    var globalAdditionalPrompt by string("")
+
+    var generationTargetAdditionalPrompt by string("")
 }
