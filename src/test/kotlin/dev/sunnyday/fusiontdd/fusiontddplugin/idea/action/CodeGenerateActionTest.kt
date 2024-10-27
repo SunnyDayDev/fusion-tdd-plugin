@@ -29,6 +29,8 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import kotlin.properties.Delegates
 
 class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
@@ -129,17 +131,21 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         verify { presentation.isEnabled = false }
     }
 
-    @Test
-    fun `on update if action is not in function, hide action`() {
-        every { caret.offset } returns 40
+    @ParameterizedTest
+    @ValueSource(ints = [CARET_OUT_OF_CLASS, CARET_ON_INNER_OBJECT])
+    fun `on update if action is not in function or class, hide action`(caretPosition: Int) {
+        every { caret.offset } returns caretPosition
 
         runReadAction { action.update(actionEvent) }
 
         verify { presentation.isEnabled = false }
     }
 
-    @Test
-    fun `on update in other cases, show action`() {
+    @ParameterizedTest
+    @ValueSource(ints = [CARET_ON_CLASS_BODY, CARET_ON_CLASS_NAME, CARET_ON_FUNCTION_BODY, CARET_ON_FUNCTION_NAME])
+    fun `on update in other cases, show action`(caretPosition: Int) {
+        every { caret.offset } returns caretPosition
+
         runReadAction { action.update(actionEvent) }
 
         verify { presentation.isEnabled = true }
@@ -181,9 +187,10 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         confirmVerified(pipelineFactory)
     }
 
-    @Test
-    fun `on perform if action is not in function, do nothing`() {
-        every { caret.offset } returns 40
+    @ParameterizedTest
+    @ValueSource(ints = [CARET_OUT_OF_CLASS, CARET_ON_INNER_OBJECT])
+    fun `on perform if action is not in function or class, do nothing`(caretPosition: Int) {
+        every { caret.offset } returns caretPosition
 
         runReadAction { action.actionPerformed(actionEvent) }
 
@@ -202,6 +209,17 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         runReadAction { action.actionPerformed(actionEvent) }
 
         confirmVerified(pipelineFactory)
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = [CARET_ON_CLASS_BODY, CARET_ON_CLASS_NAME, CARET_ON_FUNCTION_BODY, CARET_ON_FUNCTION_NAME])
+    fun `on perform if action is in function or class, perform it`(caretPosition: Int) {
+        every { caret.offset } returns caretPosition
+        configurePipelineMock()
+
+        runReadAction { action.actionPerformed(actionEvent) }
+
+        verify { pipelineFactory.collectTestsAndUsedReferencesForFun(any(), any()) }
     }
 
     @Test
@@ -226,13 +244,13 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
 
         verifyOrder {
             pipelineFactory.collectTestsAndUsedReferencesForFun(
-                targetFunction = refEq(targetFunction),
+                targetElement = refEq(targetFunction),
                 targetClass = refEq(targetClass),
             )
             pipelineFactory.prepareGenerationSourceCode(any())
             pipelineFactory.confirmGenerationSource()
             pipelineFactory.generateCodeSuggestion()
-            pipelineFactory.replaceFunctionBody(refEq(targetFunction))
+            pipelineFactory.replaceBody(refEq(targetFunction))
 
             pipeline.collectDependencies.execute(outputObserver = any())
             pipeline.prepareSource.execute(refEq(functionGenerationContext), any())
@@ -393,7 +411,7 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
             every { prepareGenerationSourceCode(any()) } returns prepareSource
             every { confirmGenerationSource() } returns confirmSource
             every { generateCodeSuggestion() } returns generateFunction
-            every { replaceFunctionBody(any()) } returns replaceFunction
+            every { replaceBody(any()) } returns replaceFunction
             every { fixGenerationResult() } returns fixGenerationResult
         }
 
@@ -445,4 +463,16 @@ class CodeGenerateActionTest : LightJavaCodeInsightFixtureTestCase5() {
         val replaceFunction: PipelineStep<GenerateCodeBlockResult, KtNamedFunction>,
         val fixGenerationResult: PipelineStep<GenerateCodeBlockResult, GenerateCodeBlockResult>,
     )
+
+    companion object {
+        const val CARET_OUT_OF_CLASS = 16
+
+        const val CARET_ON_CLASS_BODY = 37
+        const val CARET_ON_CLASS_NAME = 28
+
+        const val CARET_ON_FUNCTION_BODY = 101
+        const val CARET_ON_FUNCTION_NAME = 52
+
+        const val CARET_ON_INNER_OBJECT = 128
+    }
 }

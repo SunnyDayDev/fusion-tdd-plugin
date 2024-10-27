@@ -14,7 +14,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.test.*
 import io.mockk.every
 import io.mockk.mockk
 import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtFunction
+import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtWhenEntry
 import org.junit.jupiter.api.BeforeEach
@@ -83,7 +83,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                 )
             },
             buildContext = {
-                setTargetFunction(getClassFunction("B1.target"))
+                setTargetElement(getClassFunction("B1.target"))
                 setUsedClasses(getClass("A"), getClass("B0"), getClass("B1"), getClass("B2"), getClass("C"))
                 setUsedReferences(
                     getClass("A"),
@@ -536,7 +536,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             prepareFixture = baseCommonCaseFixtureBuilder(),
             buildContext = {
                 setUsedClasses(getClass("project.TargetClass"))
-                setTargetFunction(getClassFunction("project.TargetClass.targetFunction"))
+                setTargetElement(getClassFunction("project.TargetClass.targetFunction"))
                 setUsedReferences(getClassFunction("project.TargetClass.targetFunction"))
             },
             expectedOutput = """
@@ -558,7 +558,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             prepareFixture = baseCommonCaseFixtureBuilder(),
             buildContext = {
                 setUsedClasses(getClass("project.TargetClass"))
-                setTargetFunction(getClassFunction("project.TargetClass.targetFunction"))
+                setTargetElement(getClassFunction("project.TargetClass.targetFunction"))
                 setUsedReferences(getClassFunction("project.TargetClass.targetFunction"))
                 setTests(
                     getClass("project.TestClass") to listOf(
@@ -591,7 +591,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             prepareFixture = baseCommonCaseFixtureBuilder(),
             buildContext = {
                 setUsedClasses(getClass("project.TargetClass"))
-                setTargetFunction(getClassFunction("project.TargetClass.targetFunction"))
+                setTargetElement(getClassFunction("project.TargetClass.targetFunction"))
                 setUsedReferences(getClassFunction("project.TargetClass.targetFunction"))
                 setTests(
                     getClass("project.TestClass") to listOf(
@@ -624,7 +624,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             prepareFixture = baseCommonCaseFixtureBuilder(),
             buildContext = {
                 setUsedClasses(getClass("project.TargetClass"))
-                setTargetFunction(getClassFunction("project.TargetClass.targetFunction"))
+                setTargetElement(getClassFunction("project.TargetClass.targetFunction"))
                 setUsedReferences(getClassFunction("project.TargetClass.targetFunction"))
                 setTests(
                     getClass("project.TestClass") to listOf(
@@ -651,7 +651,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             prepareFixture = baseCommonCaseFixtureBuilder(),
             buildContext = {
                 setUsedClasses(getClass("project.TargetClass"))
-                setTargetFunction(getClassFunction("project.TargetClass.targetFunctionWithComment"))
+                setTargetElement(getClassFunction("project.TargetClass.targetFunctionWithComment"))
                 setUsedReferences(getClassFunction("project.TargetClass.targetFunctionWithComment"))
                 setTests(
                     getClass("project.TestClass") to listOf(
@@ -668,6 +668,54 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
                      * test target fun with comment
                      */
                     fun targetFunctionWithComment() {
+                        -GENERATE_HERE-
+                    }
+                }
+            """.trimIndent(),
+        )
+    }
+
+    // endregion
+
+    // region Target class
+
+    @Test
+    fun `on print class as target element, replace it's body with generate tag`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = baseCommonCaseFixtureBuilder(),
+            buildContext = {
+                setUsedClasses(getClass("project.TargetClass"))
+                setTargetElement(getClass("project.TargetClass"))
+                setUsedReferences(
+                    getClass("project.TargetClass"),
+                    getClassFunction("project.TargetClass.targetFunction"),
+                )
+            },
+            expectedOutput = """
+                class TargetClass {
+                    -GENERATE_HERE-
+                }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `on print inner class as target element, replace it's body with generate tag`() {
+        executePrepareGenerationSourceCodeTest(
+            prepareFixture = baseCommonCaseFixtureBuilder(),
+            buildContext = {
+                setUsedClasses(getClass("project.TargetClass"))
+                setTargetElement(getClass("project.TargetClass.InnerStaticClass"))
+                setUsedReferences(
+                    getClass("project.TargetClass"),
+                    getClass("project.TargetClass.InnerStaticClass"),
+                    getClassFunction("project.TargetClass.InnerStaticClass.innerTargetFunction"),
+                )
+            },
+            expectedOutput = """
+                class TargetClass {
+                
+                    class InnerStaticClass {
                         -GENERATE_HERE-
                     }
                 }
@@ -1009,7 +1057,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             },
             buildContext = simpleClassContextBuilder("project.Class1") {
                 val targetFun = getClassFunction("project.Class1.doSomething")
-                setTargetFunction(targetFun)
+                setTargetElement(targetFun)
                 setUsedReferences(targetFun)
             },
             expectedOutput = """
@@ -1076,7 +1124,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
         runInEdtAndWait { prepareFixture.invoke(fixture) }
 
         val functionContext = runReadAction {
-            var targetFun: KtFunction? = null
+            var contextTargetElement: KtDeclaration? = null
 
             var usedClasses = emptyList<KtClass>()
             var usedReferences = emptyList<PsiElement>()
@@ -1085,8 +1133,8 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
             val builder = object : FunctionContextBuilder, JavaCodeInsightTestFixture by fixture {
 
-                override fun setTargetFunction(function: KtNamedFunction?) {
-                    targetFun = function
+                override fun setTargetElement(element: KtDeclaration?) {
+                    contextTargetElement = element
                 }
 
                 override fun setUsedClasses(vararg classes: KtClass) {
@@ -1109,7 +1157,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
             builder.buildContext(fixture)
 
             FunctionGenerationContext(
-                targetFunction = targetFun,
+                targetElement = contextTargetElement,
                 usedClasses = usedClasses.distinct(),
                 usedReferences = usedReferences.distinct(),
                 tests = usedTests,
@@ -1134,7 +1182,7 @@ internal class PrepareGenerationSourceCodePipelineStepTest : LightJavaCodeInsigh
 
     private interface FunctionContextBuilder : JavaCodeInsightTestFixture {
 
-        fun setTargetFunction(function: KtNamedFunction?)
+        fun setTargetElement(element: KtDeclaration?)
 
         fun setUsedClasses(vararg classes: KtClass)
 

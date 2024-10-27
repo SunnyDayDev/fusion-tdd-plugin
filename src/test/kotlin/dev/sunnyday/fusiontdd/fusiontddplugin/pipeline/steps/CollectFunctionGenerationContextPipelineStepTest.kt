@@ -13,6 +13,9 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import dev.sunnyday.fusiontdd.fusiontddplugin.test.*
 import io.mockk.every
 import io.mockk.mockk
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtDeclaration
+import org.jetbrains.kotlin.psi.psiUtil.containingClass
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -51,7 +54,7 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
         assertStepResult = { context ->
             assertThat(context).isEqualTo(
                 FunctionGenerationContext(
-                    targetFunction = getClassFunction("project.TargetClass.targetFunction"),
+                    targetElement = getClassFunction("project.TargetClass.targetFunction"),
                     usedClasses = listOf(
                         getClass("project.TestClass"),
                         getClass("project.UsedClass"),
@@ -582,6 +585,37 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
 
     // endregion
 
+    // region Class as targetDeclaration
+
+    @Test
+    fun `on collect context for class as targetDeclaration, collect all tests where class is used`() {
+        executeCollectContextTest(
+            prepareProject = { copyDirToProject("collect/class_body/simple") },
+            createStep = { createPipelineStep(targetElement = getClassOrObject("project.TargetClass")) },
+            assertStepResult = { context ->
+                assertThat(context.usedClasses).contains(
+                    getClassOrObject("project.TargetClass"),
+                )
+                assertThat(context.tests).containsExactly(
+                    getClassOrObject("project.TargetClassTest"), listOf(
+                        getClassFunction("project.TargetClassTest.testFun1"),
+                        getClassFunction("project.TargetClassTest.testFun2"),
+                    )
+                )
+                assertThat(context.usedReferences).containsAtLeast(
+                    getClassFunction("project.TargetClass.fun1"),
+                    getClassFunction("project.TargetClass.fun2"),
+                    getClassFunction("project.TargetClassTest.testFun1"),
+                    getClassFunction("project.TargetClassTest.testFun2"),
+                )
+            }
+        )
+    }
+
+    //
+
+    // endregion
+
     // endregion
 
     // region Utils + Fixtures
@@ -605,9 +639,17 @@ class CollectFunctionGenerationContextPipelineStepTest : LightJavaCodeInsightFix
     private fun JavaCodeInsightTestFixture.createPipelineStep(
         targetFunction: String,
     ): CollectFunctionGenerationContextPipelineStep {
+        return createPipelineStep(
+            targetElement = getClassFunction(targetFunction),
+        )
+    }
+
+    private fun createPipelineStep(
+        targetElement: KtDeclaration,
+    ): CollectFunctionGenerationContextPipelineStep {
         return CollectFunctionGenerationContextPipelineStep(
-            targetFunction = getClassFunction(targetFunction),
-            targetClass = getClass(targetFunction.substringBeforeLast('.')),
+            targetElement = targetElement,
+            targetClass = targetElement as? KtClass ?: requireNotNull(targetElement.containingClass()),
             settings = settings,
         )
     }

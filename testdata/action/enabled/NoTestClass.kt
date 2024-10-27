@@ -6,4 +6,6 @@ class NoTestClass {
         //generate here
         <caret>
     }
+
+    object InnerObject
 }

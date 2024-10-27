@@ -26,7 +26,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
     private val logger = thisLogger()
 
     override fun execute(input: FunctionGenerationContext, observer: (Result<CodeBlock>) -> Unit) {
-        logger.debug("Pipeline: Prepare generation source for ${input.targetFunction?.name}")
+        logger.debug("Pipeline: Prepare generation source for ${input.targetElement?.name}")
 
         val result = runCatching {
             val step = PrepareGenerationSourceCodePipelineStepExecuting(input, settings, config)
@@ -77,7 +77,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
             input.usedClasses.groupBy { it.containingKtFile }
                 .toList()
                 .sortedWith { (file1), (file2) ->
-                    val targetFunctionFile = input.targetFunction?.containingKtFile
+                    val targetFunctionFile = input.targetElement?.containingKtFile
                     when {
                         file1 === targetFunctionFile -> 1
                         file2 === targetFunctionFile -> -1
@@ -97,7 +97,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         }
 
         private fun getTargetFunctionTopLevelClass(): KtClassOrObject? {
-            var cursor = input.targetFunction?.containingClassOrObject ?: return null
+            var cursor = input.targetElement?.containingClassOrObject ?: return null
             while (!cursor.isTopLevel()) {
                 cursor = requireNotNull(cursor.containingClassOrObject)
             }
@@ -169,23 +169,32 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
             var isEmpty = true
 
-            klass.declarations.forEach { declaration ->
-                if (declaration in input.usedReferences) {
-                    if (isEmpty) {
-                        isEmpty = false
-                        appendLine("{")
+            if (klass == input.targetElement) {
+                // TODO: better resolve format and indents
+                appendLine("{")
+                append(klass.getPreviousWhiteSpaceIndent())
+                append("    ")
+                appendLine(CodeBlock.GENERATE_HERE_TAG)
+                isEmpty = false
+            } else {
+                klass.declarations.forEach { declaration ->
+                    if (declaration in input.usedReferences) {
+                        if (isEmpty) {
+                            isEmpty = false
+                            appendLine("{")
+                        }
+
+                        if (declaration !is KtEnumEntry) appendLine()
+
+                        append(declaration.getPreviousWhiteSpaceIndent())
+
+                        printClassDeclarationItem(declaration)
                     }
-
-                    if (declaration !is KtEnumEntry) appendLine()
-
-                    append(declaration.getPreviousWhiteSpaceIndent())
-
-                    printClassDeclarationItem(declaration)
                 }
             }
 
             if (!isEmpty) {
-                append(klass.body?.rBrace?.getPreviousWhiteSpaceIndent().orEmpty())
+                append(klass.getPreviousWhiteSpaceIndent())
                 append("}")
             } else {
                 while (last() == ' ') {
@@ -251,7 +260,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
 
                 else -> {
                     when {
-                        declaration == input.targetFunction -> printTargetFunction(input.targetFunction)
+                        input.targetElement is KtNamedFunction && declaration == input.targetElement -> printTargetFunction(input.targetElement)
                         declaration is KtNamedFunction && !declaration.hasBody() -> printNoBodyFunction(declaration)
                         else -> printFilterableElement(declaration)
                     }
@@ -295,7 +304,7 @@ internal class PrepareGenerationSourceCodePipelineStep(
         private fun StringBuilder.printTargetFunctionAdditionalComments(
             firstFunDeclarationElement: PsiElement,
         ) {
-            val functionIndentWhiteSpace = input.targetFunction?.getPreviousWhiteSpaceIndent().orEmpty()
+            val functionIndentWhiteSpace = input.targetElement?.getPreviousWhiteSpaceIndent().orEmpty()
 
             val additionalCommentLines = mutableListOf<String>()
 
