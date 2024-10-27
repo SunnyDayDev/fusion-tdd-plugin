@@ -11,7 +11,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.idea.dialog.ModifySourceCodeDialog
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.*
 import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtDeclaration
 
 @Service(Service.Level.PROJECT)
 internal class ProjectPipelineStepsFactoryService(
@@ -19,11 +19,11 @@ internal class ProjectPipelineStepsFactoryService(
 ) : PipelineStepsFactoryService {
 
     override fun collectTestsAndUsedReferencesForFun(
-        targetFunction: KtNamedFunction,
+        targetElement: KtDeclaration,
         targetClass: KtClass,
     ): PipelineStep<Nothing?, FunctionGenerationContext> {
         return CollectFunctionGenerationContextPipelineStep(
-            targetFunction = targetFunction,
+            targetElement = targetElement,
             targetClass = targetClass,
             settings = project.service(),
         )
@@ -53,7 +53,7 @@ internal class ProjectPipelineStepsFactoryService(
         )
     }
 
-    override fun replaceFunctionBody(function: KtNamedFunction): PipelineStep<GenerateCodeBlockResult, KtNamedFunction> {
+    override fun replaceBody(function: KtDeclaration): PipelineStep<GenerateCodeBlockResult, KtDeclaration> {
         return ReplaceFunctionBodyPipelineStep(function)
     }
 

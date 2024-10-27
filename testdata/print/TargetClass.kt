@@ -20,4 +20,11 @@ class TargetClass {
     fun otherFunction() {
         println("Hey!")
     }
+
+    class InnerStaticClass {
+
+        fun innerTargetFunction() {
+            // do nothing
+        }
+    }
 }

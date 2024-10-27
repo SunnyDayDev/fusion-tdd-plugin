@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.psi.psiUtil.parameterIndex
 import java.util.*
 
 internal class CollectFunctionGenerationContextPipelineStep(
-    private val targetFunction: KtNamedFunction,
+    private val targetElement: KtDeclaration,
     private val targetClass: KtClass,
     private val settings: FusionTDDSettings,
 ) : PipelineStep<Nothing?, FunctionGenerationContext> {
@@ -34,9 +34,9 @@ internal class CollectFunctionGenerationContextPipelineStep(
     private val logger: Logger = thisLogger()
 
     override fun execute(input: Nothing?, observer: (Result<FunctionGenerationContext>) -> Unit) {
-        logger.debug("Pipeline: Collect tests and references for '${targetFunction.name}'")
+        logger.debug("Pipeline: Collect tests and references for '${targetElement.name}'")
 
-        val collectTask = CollectFunctionGenerationContextPipelineTask(targetFunction, targetClass, settings)
+        val collectTask = CollectFunctionGenerationContextPipelineTask(targetElement, targetClass, settings)
         val result = runCatching(collectTask::execute)
 
         observer.invoke(result)
@@ -44,7 +44,7 @@ internal class CollectFunctionGenerationContextPipelineStep(
 }
 
 private class CollectFunctionGenerationContextPipelineTask(
-    private val targetFunction: KtNamedFunction,
+    private val targetElement: KtDeclaration,
     private val targetClass: KtClass,
     private val settings: FusionTDDSettings,
 ) {
@@ -58,7 +58,7 @@ private class CollectFunctionGenerationContextPipelineTask(
     private val collectReferencesQueue: Deque<PsiElement> = ArrayDeque()
 
     private val referencedClasses = mutableSetOf<KtClassOrObject>()
-    private val usedReferences = mutableSetOf<PsiElement>(targetFunction)
+    private val usedReferences = mutableSetOf<PsiElement>(targetElement)
     private val branchFilters = mutableMapOf<PsiElement, PsiElementContentFilter>()
 
     private val referencedClassesCollector = mutableSetOf<KtClassOrObject>()
@@ -72,7 +72,7 @@ private class CollectFunctionGenerationContextPipelineTask(
 
     private val receiverInstanceClassResolver = ExpressionResultInstanceClassResolver()
 
-    private val findFunctionUsagesFactory = KotlinFindUsagesHandlerFactory(targetFunction.project)
+    private val findFunctionUsagesFactory = KotlinFindUsagesHandlerFactory(targetElement.project)
         .apply {
             findFunctionOptions.searchOverrides = true
             findClassOptions.isMethodsUsages = true
@@ -90,7 +90,7 @@ private class CollectFunctionGenerationContextPipelineTask(
         referencedClasses.add(targetClass)
 
         return FunctionGenerationContext(
-            targetFunction = targetFunction,
+            targetElement = targetElement,
             usedClasses = referencedClasses.toList(),
             usedReferences = usedReferences.toList(),
             tests = tests,
@@ -100,13 +100,16 @@ private class CollectFunctionGenerationContextPipelineTask(
 
     private fun collectTestsWithBranchPointMarking() {
         val queue = ArrayDeque<Pair<KtNamedFunction, KtClass?>>()
-        val visited = mutableSetOf(targetFunction)
+        val visited = mutableSetOf(targetElement)
 
-        getFunctionWithOverrides(targetFunction).let { functionWithOverrides ->
-            functionWithOverrides.forEach { function ->
-                queue.add(function to targetClass)
+        val startPoints = getTargetElementCollectContextStartPoints(targetElement)
+        startPoints.forEach { startPointFunction ->
+            getFunctionWithOverrides(startPointFunction).let { functionOrOverride ->
+                functionOrOverride.forEach { function ->
+                    queue.add(function to targetClass)
+                }
+                visited.addAll(functionOrOverride)
             }
-            visited.addAll(functionWithOverrides)
         }
 
         while (queue.isNotEmpty()) {
@@ -119,6 +122,14 @@ private class CollectFunctionGenerationContextPipelineTask(
         // Sort by real order
         tests.forEach { (_, tests) ->
             tests.sortBy(PsiElement::getTextOffset)
+        }
+    }
+
+    private fun getTargetElementCollectContextStartPoints(targetElement: KtDeclaration): List<KtNamedFunction> {
+        return when (targetElement) {
+            is KtClass -> targetElement.declarations.filterIsInstance<KtNamedFunction>()
+            is KtNamedFunction -> listOf(targetElement)
+            else -> emptyList()
         }
     }
 
@@ -224,20 +235,20 @@ private class CollectFunctionGenerationContextPipelineTask(
     private fun proceedUsages(
         usages: Collection<PsiReference>,
         queue: Deque<Pair<KtNamedFunction, KtClass?>>,
-        visited: MutableSet<KtNamedFunction>,
+        visited: MutableSet<KtDeclaration>,
     ) {
         usages.forEach forEachUsage@{ usage ->
             val usageOwnerFunction = walkUpToCallerFunctionWithBranchPointMarking(usage.element)
                 ?: return@forEachUsage
 
-            getFunctionWithOverrides(usageOwnerFunction).forEach { functionImplementerClass ->
-                if (visited.add(functionImplementerClass)) {
-                    queue.addFirst(functionImplementerClass to functionImplementerClass.containingClass())
+            getFunctionWithOverrides(usageOwnerFunction).forEach { functionOrOverride ->
+                if (visited.add(functionOrOverride)) {
+                    queue.addFirst(functionOrOverride to functionOrOverride.containingClass())
 
-                    if (hasTestAnnotation(functionImplementerClass)) {
-                        functionImplementerClass.containingClass()?.let { testClass ->
-                            if (checkIsTestFitCallChainRequirements(functionImplementerClass)) {
-                                tests.getOrPut(testClass, ::mutableListOf).add(functionImplementerClass)
+                    if (hasTestAnnotation(functionOrOverride)) {
+                        functionOrOverride.containingClass()?.let { testClass ->
+                            if (checkIsTestFitCallChainRequirements(functionOrOverride)) {
+                                tests.getOrPut(testClass, ::mutableListOf).add(functionOrOverride)
                             }
                         }
                     }
@@ -533,7 +544,7 @@ private class CollectFunctionGenerationContextPipelineTask(
         }
 
         proceedCollectWithSeparatedCollectorAndDrain {
-            collectNestedDependencies(targetFunction)
+            collectNestedDependencies(targetElement)
         }
     }
 
@@ -544,7 +555,7 @@ private class CollectFunctionGenerationContextPipelineTask(
             while (collectReferencesQueue.isNotEmpty()) {
                 val usedElement = collectReferencesQueue.removeFirst()
 
-                if (usedElement === targetFunction) continue
+                if (usedElement === targetElement) continue
                 usedReferencesCollector.add(usedElement)
 
                 val ownerClass = PsiTreeUtil.getParentOfType(usedElement, KtClass::class.java)

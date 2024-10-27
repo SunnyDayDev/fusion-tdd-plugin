@@ -57,7 +57,7 @@ class ProjectPipelineStepsFactoryServiceTest : LightJavaCodeInsightFixtureTestCa
 
     @Test
     fun `create step for replaceFunctionBody`() {
-        val actualStep = provider.replaceFunctionBody(mockk())
+        val actualStep = provider.replaceBody(mockk())
 
         assertThat(actualStep).isInstanceOf(ReplaceFunctionBodyPipelineStep::class.java)
     }

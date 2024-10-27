@@ -8,7 +8,7 @@ import com.intellij.ui.ColorUtil
 import com.intellij.ui.JBColor
 import com.intellij.util.animation.JBAnimator
 import com.intellij.util.animation.animation
-import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtDeclaration
 import java.awt.*
 import javax.swing.JComponent
 import kotlin.math.max
@@ -19,8 +19,8 @@ internal class GeneratingFunctionHighlightAnimator {
     private val startColor = JBColor.YELLOW
     private val endColor = ColorUtil.withAlpha(startColor, 0.3)
 
-    fun animate(function: KtNamedFunction, editor: Editor): Disposable {
-        val highlight = Highlight(function, editor)
+    fun animate(element: KtDeclaration, editor: Editor): Disposable {
+        val highlight = Highlight(element, editor)
 
         val contentComponent = editor.contentComponent
         contentComponent.add(highlight)
@@ -47,15 +47,15 @@ internal class GeneratingFunctionHighlightAnimator {
     }
 
     private class Highlight(
-        private val function: KtNamedFunction,
+        private val element: KtDeclaration,
         private val editor: Editor,
     ) : JComponent() {
 
         private var color: Color? = null
         private var fillColor: Color? = null
 
-        private val funRect = Rectangle()
-        private var funOffset: IntRange = 0..0
+        private val elementRect = Rectangle()
+        private var elementOffset: IntRange = 0..0
 
         fun setHighlightColor(color: Color) {
             this.color = color
@@ -73,26 +73,26 @@ internal class GeneratingFunctionHighlightAnimator {
 
             (g as? Graphics2D)?.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-            if (funOffset.first != function.startOffset || funOffset.last != function.endOffset) {
-                updateFunctionRect()
-                funOffset = function.startOffset..function.endOffset
+            if (elementOffset.first != element.startOffset || elementOffset.last != element.endOffset) {
+                updateElementRect()
+                elementOffset = element.startOffset..element.endOffset
             }
 
             g.color = color
-            g.drawRoundRect(funRect.x, funRect.y, funRect.width, funRect.height, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS)
+            g.drawRoundRect(elementRect.x, elementRect.y, elementRect.width, elementRect.height, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS)
 
             g.color = fillColor
-            g.fillRoundRect(funRect.x, funRect.y, funRect.width, funRect.height, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS)
+            g.fillRoundRect(elementRect.x, elementRect.y, elementRect.width, elementRect.height, HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS)
         }
 
-        private fun updateFunctionRect() {
-            val funStartPoint = editor.offsetToXY(function.startOffset)
+        private fun updateElementRect() {
+            val funStartPoint = editor.offsetToXY(element.startOffset)
             val x = funStartPoint.x
             var y = funStartPoint.y
             var width = 0
             var height = 0
 
-            for (i in function.startOffset..function.endOffset) {
+            for (i in element.startOffset..element.endOffset) {
                 val point = editor.offsetToXY(i)
                 if (point.y != funStartPoint.y && y == funStartPoint.y) {
                     y = point.y
@@ -101,8 +101,8 @@ internal class GeneratingFunctionHighlightAnimator {
                 height = max(height, point.y - y)
             }
 
-            funRect.setLocation(x, y)
-            funRect.setSize(width, height)
+            elementRect.setLocation(x, y)
+            elementRect.setSize(width, height)
         }
 
         private companion object {

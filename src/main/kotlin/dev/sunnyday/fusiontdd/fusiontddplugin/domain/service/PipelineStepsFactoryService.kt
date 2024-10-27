@@ -6,12 +6,12 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.domain.model.GenerateCodeBlockResu
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.PipelineStep
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.PrepareGenerationSourceCodePipelineStep
 import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtDeclaration
 
 internal interface PipelineStepsFactoryService {
 
     fun collectTestsAndUsedReferencesForFun(
-        targetFunction: KtNamedFunction,
+        targetElement: KtDeclaration,
         targetClass: KtClass,
     ): PipelineStep<Nothing?, FunctionGenerationContext>
 
@@ -23,7 +23,7 @@ internal interface PipelineStepsFactoryService {
 
     fun generateCodeSuggestion(): PipelineStep<CodeBlock, GenerateCodeBlockResult>
 
-    fun replaceFunctionBody(function: KtNamedFunction): PipelineStep<GenerateCodeBlockResult, KtNamedFunction>
+    fun replaceBody(function: KtDeclaration): PipelineStep<GenerateCodeBlockResult, KtDeclaration>
 
     fun fixGenerationResult(): PipelineStep<GenerateCodeBlockResult, GenerateCodeBlockResult>
 }

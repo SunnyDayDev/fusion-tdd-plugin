@@ -20,7 +20,7 @@ import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.*
 import dev.sunnyday.fusiontdd.fusiontddplugin.pipeline.steps.PrepareGenerationSourceCodePipelineStep
 import org.jetbrains.kotlin.idea.base.util.letIf
 import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtDeclaration
 
 
 internal class CodeGenerateAction(
@@ -31,10 +31,10 @@ internal class CodeGenerateAction(
 
     init {
         if (isInverseAddTestCommentsBeforeGenerationSetting) {
-            templatePresentation.description = "Generate function body by its tests, with inverted 'Add tests comments before generation' setting"
+            templatePresentation.description = "Generate function/class body by its tests, with inverted 'Add tests comments before generation' setting"
             templatePresentation.text = "TDD Generate - Inverse Add Comments"
         } else {
-            templatePresentation.description = "Generate function body by its tests"
+            templatePresentation.description = "Generate function/class body by its tests"
             templatePresentation.text = "TDD Generate"
         }
     }
@@ -49,9 +49,9 @@ internal class CodeGenerateAction(
         val presentation: Presentation = event.presentation
         val project: Project? = event.project
 
-        val targetFunctionOrReason = ActionEventUtils.getFunctionBelowCaretOrReason(event)
+        val targetElementResult = ActionEventUtils.getTargetElementThatSupportsGeneration(event)
 
-        presentation.isEnabled = !(project == null || targetFunctionOrReason.isRight)
+        presentation.isEnabled = !(project == null || targetElementResult.isRight)
     }
 
     override fun actionPerformed(event: AnActionEvent) {
@@ -60,15 +60,16 @@ internal class CodeGenerateAction(
         val project = event.project
             ?: return logCantProceed("isn't a project")
 
-        val targetFunctionOrReason = ActionEventUtils.getFunctionBelowCaretOrReason(event)
-        val targetFunction = targetFunctionOrReason.getLeftOrNull()
-            ?: return logCantProceed(targetFunctionOrReason.requireRight())
+        val targetElementBelowCaretOrReason = ActionEventUtils.getTargetElementThatSupportsGeneration(event)
 
-        val targetClass = PsiTreeUtil.getParentOfType(targetFunction, KtClass::class.java, false)
+        val targetElement = targetElementBelowCaretOrReason.getLeftOrNull()
+            ?: return logCantProceed(targetElementBelowCaretOrReason.requireRight())
+
+        val targetClass = PsiTreeUtil.getParentOfType(targetElement, KtClass::class.java, false)
             ?: return logCantProceed("isn't a class")
 
         proceedGenerateCodeAction(
-            targetFunction = targetFunction,
+            targetElement = targetElement,
             targetClass = targetClass,
             project = project,
             editor = event.dataContext.getData(CommonDataKeys.EDITOR),
@@ -80,38 +81,38 @@ internal class CodeGenerateAction(
     }
 
     private fun proceedGenerateCodeAction(
-        targetFunction: KtNamedFunction,
+        targetElement: KtDeclaration,
         targetClass: KtClass,
         project: Project,
         editor: Editor?,
     ) {
-        logger.debug("Proceed '${templatePresentation.text}' for: ${targetFunction.name}")
+        logger.debug("Proceed '${templatePresentation.text}' for: ${targetElement.name}")
 
-        generateTargetFunctionByTests(targetFunction, targetClass, project)
-            .wrapWithProgress { highlightGeneratingFunctionWithAnimation(targetFunction, editor) }
+        generateTargetFunctionByTests(targetElement, targetClass, project)
+            .wrapWithProgress { highlightGeneratingFunctionWithAnimation(targetElement, editor) }
             .execute()
     }
 
     // TODO: extract to separated class/usecase
     // TODO: move args to Pipeline.Input
     private fun generateTargetFunctionByTests(
-        targetFunction: KtNamedFunction,
+        targetElement: KtDeclaration,
         targetClass: KtClass,
         project: Project,
     ): PipelineStep<Nothing?, *> {
         val pipeline = project.service<PipelineStepsFactoryService>()
 
         return with(pipeline) {
-            prepareSourceForGenerationPipeline(targetFunction, targetClass)
-                .andThen(generateTargetFunction(project, targetFunction))
+            prepareSourceForGenerationPipeline(targetElement, targetClass)
+                .andThen(generateTargetFunction(project, targetElement))
         }
     }
 
     private fun PipelineStepsFactoryService.prepareSourceForGenerationPipeline(
-        targetFunction: KtNamedFunction,
+        targetElement: KtDeclaration,
         targetClass: KtClass,
     ): PipelineStep<Nothing?, CodeBlock> {
-        return collectTestsAndUsedReferencesForFun(targetFunction, targetClass)
+        return collectTestsAndUsedReferencesForFun(targetElement, targetClass)
             .andThen(
                 prepareGenerationSourceCode(
                     PrepareGenerationSourceCodePipelineStep.PrepareSourceConfig(
@@ -124,32 +125,32 @@ internal class CodeGenerateAction(
 
     private fun PipelineStepsFactoryService.generateTargetFunction(
         project: Project,
-        targetFunction: KtNamedFunction,
-    ): PipelineStep<CodeBlock, KtNamedFunction> {
+        targetElement: KtDeclaration,
+    ): PipelineStep<CodeBlock, KtDeclaration> {
         return generateCodeSuggestion()
-            .andThen(replaceFunctionBodyWithPossibleFix(project, targetFunction))
+            .andThen(replaceFunctionBodyWithPossibleFix(project, targetElement))
             .retry(GENERATE_FUNCTION_RETRIES_COUNT)
     }
 
     private fun PipelineStepsFactoryService.replaceFunctionBodyWithPossibleFix(
         project: Project,
-        targetFunction: KtNamedFunction,
-    ): PipelineStep<GenerateCodeBlockResult, KtNamedFunction> {
+        targetElement: KtDeclaration,
+    ): PipelineStep<GenerateCodeBlockResult, KtDeclaration> {
         val settings = project.service<FusionTDDSettings>()
 
-        return replaceFunctionBody(targetFunction)
+        return replaceBody(targetElement)
             .letIf(settings.isFixApplyGenerationResultError) { it.retryWithFix(fixGenerationResult()) }
     }
 
     private fun highlightGeneratingFunctionWithAnimation(
-        targetFunction: KtNamedFunction,
+        targetElement: KtDeclaration,
         editor: Editor?,
     ): Disposable {
         val highlightAnimator = service<GeneratingFunctionHighlightAnimatorProvider>()
             .getGeneratingFunctionHighlightAnimator()
 
         return if (editor != null) {
-            highlightAnimator.animate(targetFunction, editor)
+            highlightAnimator.animate(targetElement, editor)
         } else {
             Disposable { }
         }

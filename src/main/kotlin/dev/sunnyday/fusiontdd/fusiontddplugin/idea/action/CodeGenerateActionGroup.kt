@@ -7,7 +7,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
-import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.parentOfType
 import dev.sunnyday.fusiontdd.fusiontddplugin.domain.util.getLeftOrNull
 import dev.sunnyday.fusiontdd.fusiontddplugin.idea.settings.FusionTDDSettings
 import org.jetbrains.kotlin.psi.KtClass
@@ -35,11 +35,11 @@ class CodeGenerateActionGroup : ActionGroup(), DumbAware {
         event.dataContext.getData(PSI_FILE)
             ?: return EMPTY_ARRAY
 
-        val targetFunctionOrReason = ActionEventUtils.getFunctionBelowCaretOrReason(event)
-        val targetFunction = targetFunctionOrReason.getLeftOrNull()
+        val targetElementOrReason = ActionEventUtils.getTargetElementThatSupportsGeneration(event)
+        val targetElement = targetElementOrReason.getLeftOrNull()
             ?: return EMPTY_ARRAY
 
-        if (PsiTreeUtil.getParentOfType(targetFunction, KtClass::class.java, false) == null) {
+        if (targetElement.parentOfType<KtClass>(withSelf = true) == null) {
             return EMPTY_ARRAY
         }
 
