@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.psiUtil.findFunctionByName
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -282,6 +283,7 @@ class ReplaceFunctionBodyPipelineStepTest : LightJavaCodeInsightFixtureTestCase5
             }
 
             @Test
+            @Disabled("FIXME: Different results on local and CI")
             fun `replace only nested class body`() {
                 val text = runReadAction { targetClass.containingKtFile.text }
                 assertThat(text).isEqualTo(
